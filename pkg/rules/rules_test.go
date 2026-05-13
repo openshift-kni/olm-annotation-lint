@@ -101,3 +101,12 @@ func TestValidateDuration(t *testing.T) {
 		})
 	}
 }
+
+func TestSeverityString(t *testing.T) {
+	if rules.SeverityError.String() != "error" {
+		t.Errorf("expected 'error', got %q", rules.SeverityError.String())
+	}
+	if rules.SeverityWarning.String() != "warning" {
+		t.Errorf("expected 'warning', got %q", rules.SeverityWarning.String())
+	}
+}

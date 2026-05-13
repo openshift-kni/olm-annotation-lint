@@ -1,10 +1,10 @@
 package linter_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/openshift-kni/olm-annotation-lint/pkg/linter"
-	"github.com/openshift-kni/olm-annotation-lint/pkg/rules"
 )
 
 func TestValidFiles(t *testing.T) {
@@ -99,13 +99,7 @@ func TestControllerManagedAnnotation(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var found bool
-	for _, v := range violations {
-		if v.Annotation == "olm.operatorGroup" && v.Severity == rules.SeverityWarning {
-			found = true
-			break
-		}
-	}
+	found := findViolation(violations, "olm.operatorGroup", "controller-managed")
 	if !found {
 		t.Error("expected warning for controller-managed annotation")
 	}
@@ -130,22 +124,9 @@ func findViolation(violations []linter.Violation, annotation, messageContains st
 			if messageContains == "" {
 				return true
 			}
-			if contains(v.Message, messageContains) {
+			if strings.Contains(v.Message, messageContains) {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchString(s, substr)
-}
-
-func searchString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
 		}
 	}
 	return false

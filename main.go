@@ -8,6 +8,7 @@ import (
 
 	"github.com/openshift-kni/olm-annotation-lint/pkg/linter"
 	"github.com/openshift-kni/olm-annotation-lint/pkg/reporter"
+	"github.com/openshift-kni/olm-annotation-lint/pkg/rules"
 )
 
 func main() {
@@ -33,10 +34,9 @@ func main() {
 	violations, err := linter.Run(linter.Options{
 		Paths:   paths,
 		Exclude: excludePaths,
-		Strict:  strict,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(2)
 	}
 
@@ -58,17 +58,17 @@ func main() {
 		errorCount := 0
 		warningCount := 0
 		for _, v := range violations {
-			if v.Severity == 0 {
+			if v.Severity == rules.SeverityError {
 				errorCount++
 			} else {
 				warningCount++
 			}
 		}
-		fmt.Fprintf(os.Stderr, "\nFound %d error(s) and %d warning(s)\n", errorCount, warningCount)
+		_, _ = fmt.Fprintf(os.Stderr, "\nFound %d error(s) and %d warning(s)\n", errorCount, warningCount)
 		os.Exit(1)
 	}
 
 	if len(violations) > 0 {
-		fmt.Fprintf(os.Stderr, "\nFound %d warning(s)\n", len(violations))
+		_, _ = fmt.Fprintf(os.Stderr, "\nFound %d warning(s)\n", len(violations))
 	}
 }

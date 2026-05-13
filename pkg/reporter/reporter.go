@@ -31,10 +31,7 @@ func Report(w io.Writer, violations []linter.Violation, format Format) {
 
 func reportText(w io.Writer, violations []linter.Violation) {
 	for _, v := range violations {
-		severity := "ERROR"
-		if v.Severity == rules.SeverityWarning {
-			severity = "WARNING"
-		}
+		severity := strings.ToUpper(v.Severity.String())
 		if v.Line > 0 {
 			_, _ = fmt.Fprintf(w, "%s:%d: [%s] %s: %s (on %s)\n", v.File, v.Line, severity, v.Annotation, v.Message, v.Kind)
 		} else {
@@ -55,16 +52,12 @@ type jsonViolation struct {
 func reportJSON(w io.Writer, violations []linter.Violation) {
 	jvs := make([]jsonViolation, 0, len(violations))
 	for _, v := range violations {
-		severity := "error"
-		if v.Severity == rules.SeverityWarning {
-			severity = "warning"
-		}
 		jvs = append(jvs, jsonViolation{
 			File:       v.File,
 			Line:       v.Line,
 			Annotation: v.Annotation,
 			Kind:       v.Kind,
-			Severity:   severity,
+			Severity:   v.Severity.String(),
 			Message:    v.Message,
 		})
 	}
@@ -75,15 +68,11 @@ func reportJSON(w io.Writer, violations []linter.Violation) {
 
 func reportGitHub(w io.Writer, violations []linter.Violation) {
 	for _, v := range violations {
-		level := "error"
-		if v.Severity == rules.SeverityWarning {
-			level = "warning"
-		}
 		msg := strings.ReplaceAll(v.Message, "\n", "%0A")
 		if v.Line > 0 {
-			_, _ = fmt.Fprintf(w, "::%s file=%s,line=%d::%s: %s\n", level, v.File, v.Line, v.Annotation, msg)
+			_, _ = fmt.Fprintf(w, "::%s file=%s,line=%d::%s: %s\n", v.Severity, v.File, v.Line, v.Annotation, msg)
 		} else {
-			_, _ = fmt.Fprintf(w, "::%s file=%s::%s: %s\n", level, v.File, v.Annotation, msg)
+			_, _ = fmt.Fprintf(w, "::%s file=%s::%s: %s\n", v.Severity, v.File, v.Annotation, msg)
 		}
 	}
 }

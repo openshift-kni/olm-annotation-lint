@@ -12,13 +12,19 @@ const (
 	SeverityWarning
 )
 
+func (s Severity) String() string {
+	if s == SeverityWarning {
+		return "warning"
+	}
+	return "error"
+}
+
 type ValueFormat int
 
 const (
 	FormatString ValueFormat = iota
 	FormatDuration
 	FormatJSON
-	FormatCSV
 	FormatTemplate
 )
 
@@ -30,7 +36,7 @@ type AnnotationRule struct {
 	Description   string
 }
 
-var UserSettable = []AnnotationRule{
+var userSettable = []AnnotationRule{
 	{
 		Key:           "operatorframework.io/bundle-unpack-timeout",
 		ResourceKinds: []string{"OperatorGroup"},
@@ -75,7 +81,7 @@ var UserSettable = []AnnotationRule{
 	},
 }
 
-var ControllerManaged = []AnnotationRule{
+var controllerManaged = []AnnotationRule{
 	{
 		Key:           "olm.operatorGroup",
 		ResourceKinds: []string{"ClusterServiceVersion"},
@@ -113,36 +119,29 @@ func IsOLMAnnotation(key string) bool {
 	return false
 }
 
-func FindRule(key string) (*AnnotationRule, bool) {
-	for i := range UserSettable {
-		if UserSettable[i].Key == key {
-			return &UserSettable[i], true
+func findRuleWith(key string, match func(a, b string) bool) (AnnotationRule, bool) {
+	for _, r := range userSettable {
+		if match(r.Key, key) {
+			return r, true
 		}
 	}
-	for i := range ControllerManaged {
-		if ControllerManaged[i].Key == key {
-			return &ControllerManaged[i], true
+	for _, r := range controllerManaged {
+		if match(r.Key, key) {
+			return r, true
 		}
 	}
-	return nil, false
+	return AnnotationRule{}, false
 }
 
-func FindRuleCaseInsensitive(key string) (*AnnotationRule, bool) {
-	lower := strings.ToLower(key)
-	for i := range UserSettable {
-		if strings.ToLower(UserSettable[i].Key) == lower {
-			return &UserSettable[i], true
-		}
-	}
-	for i := range ControllerManaged {
-		if strings.ToLower(ControllerManaged[i].Key) == lower {
-			return &ControllerManaged[i], true
-		}
-	}
-	return nil, false
+func FindRule(key string) (AnnotationRule, bool) {
+	return findRuleWith(key, func(a, b string) bool { return a == b })
 }
 
-func IsValidResourceKind(rule *AnnotationRule, kind string) bool {
+func FindRuleCaseInsensitive(key string) (AnnotationRule, bool) {
+	return findRuleWith(key, strings.EqualFold)
+}
+
+func IsValidResourceKind(rule AnnotationRule, kind string) bool {
 	for _, k := range rule.ResourceKinds {
 		if k == kind {
 			return true

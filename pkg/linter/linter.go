@@ -29,14 +29,12 @@ type k8sResource struct {
 }
 
 type metadata struct {
-	Name        string            `yaml:"name"`
 	Annotations map[string]string `yaml:"annotations"`
 }
 
 type Options struct {
 	Paths   []string
 	Exclude []string
-	Strict  bool
 }
 
 func Run(opts Options) ([]Violation, error) {
@@ -119,6 +117,11 @@ func lintFile(path string) ([]Violation, error) {
 			break
 		}
 		if err != nil {
+			violations = append(violations, Violation{
+				File:     path,
+				Severity: rules.SeverityWarning,
+				Message:  fmt.Sprintf("YAML parse error: %v", err),
+			})
 			break
 		}
 
@@ -144,65 +147,39 @@ func lintFile(path string) ([]Violation, error) {
 func validateAnnotation(file string, line int, key, value, kind string) []Violation {
 	var violations []Violation
 
+	newViolation := func(sev rules.Severity, msg string) Violation {
+		return Violation{
+			File: file, Line: line, Annotation: key, Kind: kind,
+			Severity: sev, Message: msg,
+		}
+	}
+
 	rule, found := rules.FindRule(key)
 	if !found {
 		caseRule, caseFound := rules.FindRuleCaseInsensitive(key)
 		if caseFound {
-			violations = append(violations, Violation{
-				File:       file,
-				Line:       line,
-				Annotation: key,
-				Kind:       kind,
-				Severity:   rules.SeverityError,
-				Message:    fmt.Sprintf("annotation has wrong casing, use %q", caseRule.Key),
-			})
+			violations = append(violations, newViolation(rules.SeverityError,
+				fmt.Sprintf("annotation has wrong casing, use %q", caseRule.Key)))
 			return violations
 		}
 
-		violations = append(violations, Violation{
-			File:       file,
-			Line:       line,
-			Annotation: key,
-			Kind:       kind,
-			Severity:   rules.SeverityError,
-			Message:    "unknown OLM annotation",
-		})
+		violations = append(violations, newViolation(rules.SeverityError, "unknown OLM annotation"))
 		return violations
 	}
 
 	if !rule.UserSettable {
-		violations = append(violations, Violation{
-			File:       file,
-			Line:       line,
-			Annotation: key,
-			Kind:       kind,
-			Severity:   rules.SeverityWarning,
-			Message:    "annotation is controller-managed and should not be set by users",
-		})
+		violations = append(violations, newViolation(rules.SeverityWarning,
+			"annotation is controller-managed and should not be set by users"))
 	}
 
 	if !rules.IsValidResourceKind(rule, kind) {
-		violations = append(violations, Violation{
-			File:       file,
-			Line:       line,
-			Annotation: key,
-			Kind:       kind,
-			Severity:   rules.SeverityError,
-			Message:    fmt.Sprintf("annotation is not valid on %s, expected one of: %s", kind, strings.Join(rule.ResourceKinds, ", ")),
-		})
+		violations = append(violations, newViolation(rules.SeverityError,
+			fmt.Sprintf("annotation is not valid on %s, expected one of: %s", kind, strings.Join(rule.ResourceKinds, ", "))))
 	}
 
-	if rule.Format == rules.FormatDuration {
-		if !rules.ValidateDuration(value) {
-			violations = append(violations, Violation{
-				File:       file,
-				Line:       line,
-				Annotation: key,
-				Kind:       kind,
-				Severity:   rules.SeverityError,
-				Message:    fmt.Sprintf("invalid duration value %q, expected format like 10m, 1h30m, 5s", value),
-			})
-		}
+	if rule.Format == rules.FormatDuration && !rules.ValidateDuration(value) {
+		violations = append(violations, newViolation(rules.SeverityError,
+			fmt.Sprintf("invalid duration value %q, expected format like 10m, 1h30m, 5s", value)))
 	}
 
 	return violations

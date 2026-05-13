@@ -1,0 +1,10 @@
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  annotations:
+    OLM.providedAPIs: "Test.v1.example.com"
+  name: test-operator
+  namespace: test-namespace
+spec:
+  upgradeStrategy: Default

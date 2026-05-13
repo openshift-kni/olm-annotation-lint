@@ -1,0 +1,32 @@
+name: "OLM Annotation Lint"
+description: "Validate OLM annotations on Kubernetes resources"
+inputs:
+  path:
+    description: "Path or comma-separated paths to scan"
+    required: false
+    default: "."
+  exclude:
+    description: "Comma-separated paths to exclude"
+    required: false
+    default: ""
+  strict:
+    description: "Treat warnings as errors"
+    required: false
+    default: "false"
+outputs:
+  violations:
+    description: "Number of violations found"
+runs:
+  using: docker
+  image: Dockerfile
+  args:
+    - "--path"
+    - ${{ inputs.path }}
+    - "--exclude"
+    - ${{ inputs.exclude }}
+    - "--strict=${{ inputs.strict }}"
+    - "--format"
+    - "github"
+branding:
+  icon: check-circle
+  color: orange

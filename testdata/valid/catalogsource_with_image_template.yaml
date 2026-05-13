@@ -1,0 +1,11 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  annotations:
+    olm.catalogImageTemplate: "quay.io/example/catalog:v{kube_major_version}.{kube_minor_version}"
+  name: test-catalog
+  namespace: openshift-marketplace
+spec:
+  sourceType: grpc
+  image: quay.io/example/catalog:latest

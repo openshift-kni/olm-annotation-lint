@@ -57,6 +57,32 @@ func TestFindRule(t *testing.T) {
 	}
 }
 
+func TestFindRuleConsoleAnnotations(t *testing.T) {
+	tests := []struct {
+		key  string
+		kind string
+	}{
+		{"operatorframework.io/suggested-namespace", "ClusterServiceVersion"},
+		{"operatorframework.io/suggested-namespace-template", "ClusterServiceVersion"},
+		{"operatorframework.io/cluster-monitoring", "ClusterServiceVersion"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			rule, found := rules.FindRule(tt.key)
+			if !found {
+				t.Fatalf("FindRule(%q) not found", tt.key)
+			}
+			if !rule.UserSettable {
+				t.Errorf("expected %q to be user-settable", tt.key)
+			}
+			if !rules.IsValidResourceKind(rule, tt.kind) {
+				t.Errorf("expected %q to be valid on %s", tt.key, tt.kind)
+			}
+		})
+	}
+}
+
 func TestFindRuleCaseInsensitive(t *testing.T) {
 	rule, found := rules.FindRuleCaseInsensitive("OLM.providedAPIs")
 	if !found {

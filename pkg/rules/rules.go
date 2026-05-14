@@ -79,6 +79,27 @@ var userSettable = []AnnotationRule{
 		Format:        FormatString,
 		Description:   "Exclude subscription from global namespace resolution",
 	},
+	{
+		Key:           "operatorframework.io/suggested-namespace",
+		ResourceKinds: []string{"ClusterServiceVersion"},
+		UserSettable:  true,
+		Format:        FormatString,
+		Description:   "Suggested namespace for operator installation (consumed by OpenShift Console)",
+	},
+	{
+		Key:           "operatorframework.io/suggested-namespace-template",
+		ResourceKinds: []string{"ClusterServiceVersion"},
+		UserSettable:  true,
+		Format:        FormatJSON,
+		Description:   "JSON template for suggested namespace with labels and annotations (consumed by OpenShift Console)",
+	},
+	{
+		Key:           "operatorframework.io/cluster-monitoring",
+		ResourceKinds: []string{"ClusterServiceVersion"},
+		UserSettable:  true,
+		Format:        FormatString,
+		Description:   "Enable cluster monitoring for the operator namespace (consumed by OpenShift Console)",
+	},
 }
 
 var controllerManaged = []AnnotationRule{

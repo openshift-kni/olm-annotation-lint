@@ -1,0 +1,12 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    operatorframework.io/suggested-namespace: openshift-lifecycle-agent
+    operatorframework.io/suggested-namespace-template: '{"metadata":{"labels":{"openshift.io/cluster-monitoring":"true"}}}'
+    operatorframework.io/cluster-monitoring: "true"
+  name: lifecycle-agent.v4.20.0
+  namespace: openshift-lifecycle-agent
+spec:
+  displayName: Lifecycle Agent

@@ -26,6 +26,22 @@ scenario-test: build
 		fi; \
 		echo "PASS: $$f correctly rejected"; \
 	done
+	@echo ""
+	@echo "=== Testing --version flag ==="
+	@OUTPUT=$$(./$(BINARY) --version); \
+	if [ -z "$$OUTPUT" ]; then \
+		echo "FAIL: --version produced no output"; \
+		exit 1; \
+	fi; \
+	echo "PASS: --version prints '$$OUTPUT'"
+	@echo ""
+	@echo "=== Testing --list-rules flag ==="
+	@OUTPUT=$$(./$(BINARY) --list-rules); \
+	if ! echo "$$OUTPUT" | grep -q "User-settable annotations"; then \
+		echo "FAIL: --list-rules missing expected output"; \
+		exit 1; \
+	fi; \
+	echo "PASS: --list-rules prints annotation list"
 
 docker-build:
 	docker build -t $(IMAGE):$(TAG) .

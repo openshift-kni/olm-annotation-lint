@@ -1,6 +1,8 @@
 package rules_test
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/openshift-kni/olm-annotation-lint/pkg/rules"
@@ -137,5 +139,27 @@ func TestSeverityString(t *testing.T) {
 	}
 	if rules.SeverityInfo.String() != "notice" {
 		t.Errorf("expected 'notice', got %q", rules.SeverityInfo.String())
+	}
+}
+
+func TestPrintRules(t *testing.T) {
+	var buf bytes.Buffer
+	rules.PrintRules(&buf)
+	output := buf.String()
+
+	if !strings.Contains(output, "User-settable annotations:") {
+		t.Error("expected user-settable header in output")
+	}
+	if !strings.Contains(output, "Controller-managed annotations") {
+		t.Error("expected controller-managed header in output")
+	}
+	if !strings.Contains(output, "operatorframework.io/bundle-unpack-timeout") {
+		t.Error("expected bundle-unpack-timeout in output")
+	}
+	if !strings.Contains(output, "olm.operatorGroup") {
+		t.Error("expected olm.operatorGroup in output")
+	}
+	if !strings.Contains(output, "(duration)") {
+		t.Error("expected format type in output")
 	}
 }

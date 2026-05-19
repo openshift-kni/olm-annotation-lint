@@ -11,13 +11,17 @@ import (
 	"github.com/openshift-kni/olm-annotation-lint/pkg/rules"
 )
 
+var version = "dev"
+
 func main() {
 	var (
-		path    string
-		exclude string
-		allow   string
-		strict  bool
-		format  string
+		path        string
+		exclude     string
+		allow       string
+		strict      bool
+		format      string
+		showVersion bool
+		listRules   bool
 	)
 
 	flag.StringVar(&path, "path", ".", "Path or comma-separated paths to scan")
@@ -25,7 +29,19 @@ func main() {
 	flag.StringVar(&allow, "allow", "", "Comma-separated annotation keys to allow (bypass unknown annotation errors)")
 	flag.BoolVar(&strict, "strict", false, "Treat warnings as errors")
 	flag.StringVar(&format, "format", "text", "Output format: text, json, github")
+	flag.BoolVar(&showVersion, "version", false, "Print version and exit")
+	flag.BoolVar(&listRules, "list-rules", false, "List all known OLM annotations and exit")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Println(version)
+		return
+	}
+
+	if listRules {
+		rules.PrintRules(os.Stdout)
+		return
+	}
 
 	paths := strings.Split(path, ",")
 	var excludePaths []string

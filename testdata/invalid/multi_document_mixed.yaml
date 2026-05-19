@@ -1,0 +1,20 @@
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  annotations:
+    operatorframework.io/bundle-unpack-timeout: 10m
+  name: valid-operatorgroup
+  namespace: test-namespace
+spec:
+  upgradeStrategy: Default
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    olm.operatorframework.io/bundle-install-timeout: "10m"
+  name: test-operator.v1.0.0
+  namespace: test-namespace
+spec:
+  displayName: Test Operator

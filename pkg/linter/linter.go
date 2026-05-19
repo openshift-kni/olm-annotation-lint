@@ -69,13 +69,13 @@ func Run(opts Options) ([]Violation, error) {
 func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([]Violation, error) {
 	var violations []Violation
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
+		if d.IsDir() {
 			for _, ex := range exclude {
-				if matched, _ := filepath.Match(ex, info.Name()); matched {
+				if matched, _ := filepath.Match(ex, d.Name()); matched {
 					return filepath.SkipDir
 				}
 				if strings.Contains(path, ex) {
@@ -207,6 +207,9 @@ func buildAnnotationLineMap(data []byte) map[string]int {
 				lines[key] = lineNum
 			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "warning: error scanning for line numbers: %v\n", err)
 	}
 	return lines
 }

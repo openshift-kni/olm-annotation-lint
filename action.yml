@@ -17,9 +17,6 @@ inputs:
     description: "Comma-separated annotation keys to allow (bypass unknown annotation errors)"
     required: false
     default: ""
-outputs:
-  violations:
-    description: "Number of violations found"
 runs:
   using: docker
   image: Dockerfile

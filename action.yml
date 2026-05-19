@@ -13,6 +13,10 @@ inputs:
     description: "Treat warnings as errors"
     required: false
     default: "false"
+  allow:
+    description: "Comma-separated annotation keys to allow (bypass unknown annotation errors)"
+    required: false
+    default: ""
 outputs:
   violations:
     description: "Number of violations found"
@@ -25,6 +29,8 @@ runs:
     - "--exclude"
     - ${{ inputs.exclude }}
     - "--strict=${{ inputs.strict }}"
+    - "--allow"
+    - ${{ inputs.allow }}
     - "--format"
     - "github"
 branding:

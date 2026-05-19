@@ -10,13 +10,18 @@ type Severity int
 const (
 	SeverityError Severity = iota
 	SeverityWarning
+	SeverityInfo
 )
 
 func (s Severity) String() string {
-	if s == SeverityWarning {
+	switch s {
+	case SeverityWarning:
 		return "warning"
+	case SeverityInfo:
+		return "notice"
+	default:
+		return "error"
 	}
-	return "error"
 }
 
 type ValueFormat int

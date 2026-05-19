@@ -135,4 +135,7 @@ func TestSeverityString(t *testing.T) {
 	if rules.SeverityWarning.String() != "warning" {
 		t.Errorf("expected 'warning', got %q", rules.SeverityWarning.String())
 	}
+	if rules.SeverityInfo.String() != "notice" {
+		t.Errorf("expected 'notice', got %q", rules.SeverityInfo.String())
+	}
 }

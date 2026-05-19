@@ -72,6 +72,44 @@ func TestReportGitHub(t *testing.T) {
 	}
 }
 
+func TestReportGitHubNotice(t *testing.T) {
+	infoViolations := []linter.Violation{
+		{
+			File:       "test.yaml",
+			Line:       5,
+			Annotation: "olm.custom",
+			Kind:       "OperatorGroup",
+			Severity:   rules.SeverityInfo,
+			Message:    `annotation "olm.custom" allowed via user override`,
+		},
+	}
+	var buf bytes.Buffer
+	reporter.Report(&buf, infoViolations, reporter.FormatGitHub)
+	output := buf.String()
+	if !strings.Contains(output, "::notice file=test.yaml,line=5::") {
+		t.Errorf("expected GitHub notice annotation, got: %s", output)
+	}
+}
+
+func TestHasErrorsIgnoresInfo(t *testing.T) {
+	infoOnly := []linter.Violation{
+		{
+			File:       "test.yaml",
+			Line:       5,
+			Annotation: "olm.custom",
+			Kind:       "OperatorGroup",
+			Severity:   rules.SeverityInfo,
+			Message:    "allowed via user override",
+		},
+	}
+	if reporter.HasErrors(infoOnly, false) {
+		t.Error("expected HasErrors to return false with only info violations")
+	}
+	if reporter.HasErrors(infoOnly, true) {
+		t.Error("expected HasErrors to return false with info violations even in strict mode")
+	}
+}
+
 func TestHasErrors(t *testing.T) {
 	if !reporter.HasErrors(testViolations, false) {
 		t.Error("expected HasErrors to return true with error violations")

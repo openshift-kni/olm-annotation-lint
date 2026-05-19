@@ -29,6 +29,12 @@ jobs:
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o olm-annotation-lint-linux-arm64 .
           GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o olm-annotation-lint-darwin-amd64 .
           GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o olm-annotation-lint-darwin-arm64 .
+      - name: Smoke test
+        run: |
+          ./olm-annotation-lint-linux-amd64 --version
+          ./olm-annotation-lint-linux-amd64 --list-rules
+          ./olm-annotation-lint-linux-amd64 --path testdata/valid
+          ./olm-annotation-lint-linux-amd64 --path testdata/invalid/unknown_olm_annotation.yaml && exit 1 || true
       - name: Generate checksums
         run: sha256sum olm-annotation-lint-* > checksums.txt
       - name: Create release

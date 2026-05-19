@@ -152,7 +152,21 @@ olm-annotation-lint --path . --strict
 
 # Allow specific annotations not yet in the hardcoded list
 olm-annotation-lint --path . --allow olm.operatorframework.io/bundle-install-timeout
+
+# Print version
+olm-annotation-lint --version
+
+# List all known OLM annotations
+olm-annotation-lint --list-rules
 ```
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | No errors (warnings may be present) |
+| `1` | Errors found (or warnings in `--strict` mode) |
+| `2` | Runtime error (invalid path, unreadable file, bad flags) |
 
 ### Output Formats
 

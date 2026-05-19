@@ -1,6 +1,8 @@
 package rules
 
 import (
+	"fmt"
+	"io"
 	"strings"
 	"time"
 )
@@ -179,4 +181,29 @@ func IsValidResourceKind(rule AnnotationRule, kind string) bool {
 func ValidateDuration(value string) bool {
 	_, err := time.ParseDuration(value)
 	return err == nil
+}
+
+func formatName(f ValueFormat) string {
+	switch f {
+	case FormatDuration:
+		return "duration"
+	case FormatJSON:
+		return "JSON"
+	case FormatTemplate:
+		return "template"
+	default:
+		return "string"
+	}
+}
+
+func PrintRules(w io.Writer) {
+	_, _ = fmt.Fprintln(w, "User-settable annotations:")
+	for _, r := range userSettable {
+		_, _ = fmt.Fprintf(w, "  %-65s %s  (%s)\n", r.Key, strings.Join(r.ResourceKinds, ", "), formatName(r.Format))
+	}
+	_, _ = fmt.Fprintln(w, "")
+	_, _ = fmt.Fprintln(w, "Controller-managed annotations (should not be set by users):")
+	for _, r := range controllerManaged {
+		_, _ = fmt.Fprintf(w, "  %-65s %s\n", r.Key, strings.Join(r.ResourceKinds, ", "))
+	}
 }

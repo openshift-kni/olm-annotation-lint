@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/openshift-kni/olm-annotation-lint/pkg/rules"
@@ -33,8 +34,9 @@ type metadata struct {
 }
 
 type Options struct {
-	Paths   []string
-	Exclude []string
+	Paths              []string
+	Exclude            []string
+	AllowedAnnotations []string
 }
 
 func Run(opts Options) ([]Violation, error) {
@@ -47,13 +49,13 @@ func Run(opts Options) ([]Violation, error) {
 		}
 
 		if info.IsDir() {
-			violations, err := lintDirectory(p, opts.Exclude)
+			violations, err := lintDirectory(p, opts.Exclude, opts.AllowedAnnotations)
 			if err != nil {
 				return nil, err
 			}
 			allViolations = append(allViolations, violations...)
 		} else {
-			violations, err := lintFile(p)
+			violations, err := lintFile(p, opts.AllowedAnnotations)
 			if err != nil {
 				return nil, err
 			}
@@ -64,7 +66,7 @@ func Run(opts Options) ([]Violation, error) {
 	return allViolations, nil
 }
 
-func lintDirectory(dir string, exclude []string) ([]Violation, error) {
+func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([]Violation, error) {
 	var violations []Violation
 
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -88,7 +90,7 @@ func lintDirectory(dir string, exclude []string) ([]Violation, error) {
 			return nil
 		}
 
-		fileViolations, err := lintFile(path)
+		fileViolations, err := lintFile(path, allowedAnnotations)
 		if err != nil {
 			return err
 		}
@@ -99,7 +101,7 @@ func lintDirectory(dir string, exclude []string) ([]Violation, error) {
 	return violations, err
 }
 
-func lintFile(path string) ([]Violation, error) {
+func lintFile(path string, allowedAnnotations []string) ([]Violation, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
@@ -136,7 +138,7 @@ func lintFile(path string) ([]Violation, error) {
 
 			line := annotationLines[key]
 
-			v := validateAnnotation(path, line, key, value, resource.Kind)
+			v := validateAnnotation(path, line, key, value, resource.Kind, allowedAnnotations)
 			violations = append(violations, v...)
 		}
 	}
@@ -144,7 +146,7 @@ func lintFile(path string) ([]Violation, error) {
 	return violations, nil
 }
 
-func validateAnnotation(file string, line int, key, value, kind string) []Violation {
+func validateAnnotation(file string, line int, key, value, kind string, allowedAnnotations []string) []Violation {
 	var violations []Violation
 
 	newViolation := func(sev rules.Severity, msg string) Violation {
@@ -160,6 +162,12 @@ func validateAnnotation(file string, line int, key, value, kind string) []Violat
 		if caseFound {
 			violations = append(violations, newViolation(rules.SeverityError,
 				fmt.Sprintf("annotation has wrong casing, use %q", caseRule.Key)))
+			return violations
+		}
+
+		if slices.Contains(allowedAnnotations, key) {
+			violations = append(violations, newViolation(rules.SeverityInfo,
+				fmt.Sprintf("annotation %q allowed via user override", key)))
 			return violations
 		}
 

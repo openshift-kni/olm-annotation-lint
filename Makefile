@@ -1,6 +1,9 @@
 BINARY := olm-annotation-lint
 
-.PHONY: build test lint clean scenario-test
+IMAGE ?= quay.io/bapalm/olm-annotation-lint
+TAG ?= latest
+
+.PHONY: build test lint clean scenario-test docker-build docker-lint
 
 build:
 	go build -o $(BINARY) .
@@ -23,6 +26,12 @@ scenario-test: build
 		fi; \
 		echo "PASS: $$f correctly rejected"; \
 	done
+
+docker-build:
+	docker build -t $(IMAGE):$(TAG) .
+
+docker-lint: docker-build
+	docker run --rm -v $(PWD):/workspace $(IMAGE):$(TAG) --path /workspace
 
 clean:
 	rm -f $(BINARY)

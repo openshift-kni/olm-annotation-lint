@@ -15,12 +15,14 @@ func main() {
 	var (
 		path    string
 		exclude string
+		allow   string
 		strict  bool
 		format  string
 	)
 
 	flag.StringVar(&path, "path", ".", "Path or comma-separated paths to scan")
 	flag.StringVar(&exclude, "exclude", "", "Comma-separated paths to exclude")
+	flag.StringVar(&allow, "allow", "", "Comma-separated annotation keys to allow (bypass unknown annotation errors)")
 	flag.BoolVar(&strict, "strict", false, "Treat warnings as errors")
 	flag.StringVar(&format, "format", "text", "Output format: text, json, github")
 	flag.Parse()
@@ -30,10 +32,15 @@ func main() {
 	if exclude != "" {
 		excludePaths = strings.Split(exclude, ",")
 	}
+	var allowedAnnotations []string
+	if allow != "" {
+		allowedAnnotations = strings.Split(allow, ",")
+	}
 
 	violations, err := linter.Run(linter.Options{
-		Paths:   paths,
-		Exclude: excludePaths,
+		Paths:              paths,
+		Exclude:            excludePaths,
+		AllowedAnnotations: allowedAnnotations,
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -54,21 +61,22 @@ func main() {
 		reporter.Report(os.Stdout, violations, outputFormat)
 	}
 
-	if reporter.HasErrors(violations, strict) {
-		errorCount := 0
-		warningCount := 0
-		for _, v := range violations {
-			if v.Severity == rules.SeverityError {
-				errorCount++
-			} else {
-				warningCount++
-			}
+	var errorCount, warningCount int
+	for _, v := range violations {
+		switch v.Severity {
+		case rules.SeverityError:
+			errorCount++
+		case rules.SeverityWarning:
+			warningCount++
 		}
+	}
+
+	if reporter.HasErrors(violations, strict) {
 		_, _ = fmt.Fprintf(os.Stderr, "\nFound %d error(s) and %d warning(s)\n", errorCount, warningCount)
 		os.Exit(1)
 	}
 
-	if len(violations) > 0 {
-		_, _ = fmt.Fprintf(os.Stderr, "\nFound %d warning(s)\n", len(violations))
+	if warningCount > 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "\nFound %d warning(s)\n", warningCount)
 	}
 }

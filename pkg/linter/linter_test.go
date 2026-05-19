@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/openshift-kni/olm-annotation-lint/pkg/linter"
+	"github.com/openshift-kni/olm-annotation-lint/pkg/rules"
 )
 
 func TestValidFiles(t *testing.T) {
@@ -115,6 +116,47 @@ func TestExcludePaths(t *testing.T) {
 	}
 	if len(violations) > 0 {
 		t.Errorf("expected no violations when excluding invalid dir, got %d", len(violations))
+	}
+}
+
+func TestAllowedAnnotationOverride(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths:              []string{"../../testdata/invalid/unknown_olm_annotation.yaml"},
+		AllowedAnnotations: []string{"olm.operatorframework.io/bundle-install-timeout"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, v := range violations {
+		if v.Annotation == "olm.operatorframework.io/bundle-install-timeout" {
+			if v.Severity == rules.SeverityError {
+				t.Error("expected allowed annotation to not produce an error")
+			}
+			if v.Severity != rules.SeverityInfo {
+				t.Errorf("expected info severity for allowed annotation, got %s", v.Severity)
+			}
+			if !strings.Contains(v.Message, "allowed via user override") {
+				t.Errorf("expected override message, got %q", v.Message)
+			}
+			return
+		}
+	}
+	t.Error("expected a violation (info notice) for the allowed annotation")
+}
+
+func TestAllowedAnnotationDoesNotAffectKnownRules(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths:              []string{"../../testdata/valid"},
+		AllowedAnnotations: []string{"olm.operatorframework.io/bundle-install-timeout"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, v := range violations {
+		if v.Severity == rules.SeverityError {
+			t.Errorf("unexpected error on valid file with allow list set: %s: %s", v.Annotation, v.Message)
+		}
 	}
 }
 

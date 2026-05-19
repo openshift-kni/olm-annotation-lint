@@ -1,7 +1,6 @@
 package linter
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -107,14 +106,12 @@ func lintFile(path string, allowedAnnotations []string) ([]Violation, error) {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 
-	annotationLines := buildAnnotationLineMap(data)
-
 	var violations []Violation
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 
 	for {
-		var resource k8sResource
-		err := decoder.Decode(&resource)
+		var node yaml.Node
+		err := decoder.Decode(&node)
 		if err == io.EOF {
 			break
 		}
@@ -127,9 +124,22 @@ func lintFile(path string, allowedAnnotations []string) ([]Violation, error) {
 			break
 		}
 
+		var resource k8sResource
+		if err := node.Decode(&resource); err != nil {
+			violations = append(violations, Violation{
+				File:     path,
+				Line:     node.Line,
+				Severity: rules.SeverityWarning,
+				Message:  fmt.Sprintf("cannot decode as Kubernetes resource: %v", err),
+			})
+			continue
+		}
+
 		if resource.APIVersion == "" || resource.Kind == "" {
 			continue
 		}
+
+		annotationLines := extractAnnotationLines(&node)
 
 		for key, value := range resource.Metadata.Annotations {
 			if !rules.IsOLMAnnotation(key) {
@@ -193,23 +203,36 @@ func validateAnnotation(file string, line int, key, value, kind string, allowedA
 	return violations
 }
 
-func buildAnnotationLineMap(data []byte) map[string]int {
+func extractAnnotationLines(root *yaml.Node) map[string]int {
 	lines := map[string]int{}
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	lineNum := 0
-	for scanner.Scan() {
-		lineNum++
-		line := strings.TrimSpace(scanner.Text())
-		if strings.Contains(line, ":") && !strings.HasPrefix(line, "#") {
-			key := strings.SplitN(line, ":", 2)[0]
-			key = strings.TrimSpace(key)
-			if rules.IsOLMAnnotation(key) {
-				lines[key] = lineNum
-			}
-		}
+	metadataNode := findMappingValue(root, "metadata")
+	if metadataNode == nil {
+		return lines
 	}
-	if err := scanner.Err(); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "warning: error scanning for line numbers: %v\n", err)
+	annotationsNode := findMappingValue(metadataNode, "annotations")
+	if annotationsNode == nil || annotationsNode.Kind != yaml.MappingNode {
+		return lines
+	}
+	for i := 0; i+1 < len(annotationsNode.Content); i += 2 {
+		lines[annotationsNode.Content[i].Value] = annotationsNode.Content[i].Line
 	}
 	return lines
+}
+
+func findMappingValue(node *yaml.Node, key string) *yaml.Node {
+	if node == nil {
+		return nil
+	}
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		return findMappingValue(node.Content[0], key)
+	}
+	if node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1]
+		}
+	}
+	return nil
 }

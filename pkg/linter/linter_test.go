@@ -194,6 +194,42 @@ func TestMultiDocumentMixed(t *testing.T) {
 	}
 }
 
+func TestEmptyFile(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/valid/empty_file.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		t.Errorf("expected no violations for empty file, got %d", len(violations))
+	}
+}
+
+func TestCommentsOnlyFile(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/valid/comments_only.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		t.Errorf("expected no violations for comments-only file, got %d", len(violations))
+	}
+}
+
+func TestNoMetadataResource(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/valid/no_metadata.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		t.Errorf("expected no violations for resource without annotations, got %d", len(violations))
+	}
+}
+
 func findViolation(violations []linter.Violation, annotation, messageContains string) bool {
 	for _, v := range violations {
 		if v.Annotation == annotation {

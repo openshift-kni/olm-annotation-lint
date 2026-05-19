@@ -1,0 +1,31 @@
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  annotations:
+    operatorframework.io/bundle-unpack-timeout: 10m
+  name: test-operatorgroup
+  namespace: test-namespace
+spec:
+  upgradeStrategy: Default
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    olm.skipRange: ">=1.0.0 <2.0.0"
+    operatorframework.io/suggested-namespace: test-namespace
+  name: test-operator.v1.0.0
+  namespace: test-namespace
+spec:
+  displayName: Test Operator
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  annotations:
+    operatorframework.io/priorityclass: system-cluster-critical
+  name: test-catalog
+  namespace: openshift-marketplace
+spec:
+  sourceType: grpc

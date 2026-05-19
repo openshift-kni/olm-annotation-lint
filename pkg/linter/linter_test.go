@@ -160,6 +160,40 @@ func TestAllowedAnnotationDoesNotAffectKnownRules(t *testing.T) {
 	}
 }
 
+func TestMultiDocumentValid(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/valid/multi_document.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, v := range violations {
+		if v.Severity == rules.SeverityError {
+			t.Errorf("unexpected error in multi-document file: %s: %s", v.Annotation, v.Message)
+		}
+	}
+}
+
+func TestMultiDocumentMixed(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/multi_document_mixed.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "unknown OLM annotation")
+	if !found {
+		t.Error("expected violation for unknown annotation in second document")
+	}
+
+	for _, v := range violations {
+		if v.Annotation == "operatorframework.io/bundle-unpack-timeout" && v.Severity == rules.SeverityError {
+			t.Error("valid annotation in first document should not produce an error")
+		}
+	}
+}
+
 func findViolation(violations []linter.Violation, annotation, messageContains string) bool {
 	for _, v := range violations {
 		if v.Annotation == annotation {

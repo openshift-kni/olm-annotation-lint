@@ -17,6 +17,10 @@ inputs:
     description: "Comma-separated annotation keys to allow (bypass unknown annotation errors)"
     required: false
     default: ""
+  format:
+    description: "Output format: text, json, github"
+    required: false
+    default: "github"
 runs:
   using: docker
   image: Dockerfile
@@ -29,7 +33,7 @@ runs:
     - "--allow"
     - ${{ inputs.allow }}
     - "--format"
-    - "github"
+    - ${{ inputs.format }}
 branding:
   icon: check-circle
   color: orange

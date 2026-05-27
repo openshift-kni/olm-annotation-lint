@@ -208,7 +208,8 @@ func validateAnnotation(file string, line int, key, value, kind string, allowedA
 			return violations
 		}
 
-		violations = append(violations, newViolation(rules.SeverityError, "unknown OLM annotation"))
+		violations = append(violations, newViolation(rules.SeverityError,
+			fmt.Sprintf("unknown OLM annotation (use --allow %s to bypass this error)", key)))
 		return violations
 	}
 

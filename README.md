@@ -174,8 +174,31 @@ All flags support both long and short forms:
 | `--allow` | `-a` | Comma-separated annotation keys to allow |
 | `--strict` | `-s` | Treat warnings as errors |
 | `--format` | `-f` | Output format: text, json, github |
+| `--config` | `-c` | Path to config file |
 | `--version` | `-v` | Print version and exit |
 | `--list-rules` | `-l` | List all known OLM annotations and exit |
+
+### Configuration File
+
+Create a `.olm-lint.yaml` in your project root to store default settings:
+
+```yaml
+# .olm-lint.yaml
+path:
+  - "manifests"
+  - "deploy"
+exclude:
+  - "vendor"
+  - "testdata"
+allow:
+  - "olm.operatorframework.io/bundle-install-timeout"
+strict: false
+```
+
+Fields accept either a list or a comma-separated string (e.g., `exclude: "vendor,testdata"`).
+
+The config file is auto-discovered in the current directory. Use `--config` to specify a
+custom path. CLI flags always take precedence over config file values.
 
 ### Exit Codes
 

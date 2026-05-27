@@ -159,6 +159,10 @@ olm-annotation-lint -v
 
 # List all known OLM annotations
 olm-annotation-lint -l
+
+# Read from stdin (use -p -)
+kubectl get csv -n openshift-operators -o yaml | olm-annotation-lint -p -
+cat manifest.yaml | olm-annotation-lint -p -
 ```
 
 All flags support both long and short forms:

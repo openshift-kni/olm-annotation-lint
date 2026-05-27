@@ -272,6 +272,87 @@ func TestNoMetadataResource(t *testing.T) {
 	}
 }
 
+func TestLintDataValid(t *testing.T) {
+	data := []byte(`---
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    olm.skipRange: ">=1.0.0 <2.0.0"
+  name: test-operator.v2.0.0
+  namespace: test-namespace
+spec:
+  displayName: Test Operator
+`)
+	violations, err := linter.LintData(data, "<stdin>", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		t.Errorf("expected no violations, got %d: %v", len(violations), violations)
+	}
+}
+
+func TestLintDataInvalid(t *testing.T) {
+	data := []byte(`---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  annotations:
+    operatorframework.io/bundle-unpack-timeout: "not-a-duration"
+  name: test
+  namespace: test
+spec:
+  upgradeStrategy: Default
+`)
+	violations, err := linter.LintData(data, "<stdin>", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) == 0 {
+		t.Fatal("expected at least one violation")
+	}
+	found := findViolation(violations, "operatorframework.io/bundle-unpack-timeout", "invalid duration")
+	if !found {
+		t.Error("expected violation for bad duration value from LintData")
+	}
+	if violations[0].File != "<stdin>" {
+		t.Errorf("expected file to be <stdin>, got %q", violations[0].File)
+	}
+}
+
+func TestLintDataMultiDocument(t *testing.T) {
+	data := []byte(`---
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  annotations:
+    operatorframework.io/priorityclass: "system-cluster-critical"
+  name: test
+  namespace: test
+spec:
+  sourceType: grpc
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  annotations:
+    operatorframework.io/bundle-unpack-timeout: "bad"
+  name: test
+  namespace: test
+spec:
+  upgradeStrategy: Default
+`)
+	violations, err := linter.LintData(data, "<stdin>", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := findViolation(violations, "operatorframework.io/bundle-unpack-timeout", "invalid duration")
+	if !found {
+		t.Error("expected violation from second document")
+	}
+}
+
 func findViolation(violations []linter.Violation, annotation, messageContains string) bool {
 	for _, v := range violations {
 		if v.Annotation == annotation {

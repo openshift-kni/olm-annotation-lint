@@ -181,6 +181,34 @@ func TestValidateTemplate(t *testing.T) {
 	}
 }
 
+func TestValidateSemverRange(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{"range", ">=1.0.0 <2.0.0", true},
+		{"single constraint", ">=1.2.3", true},
+		{"exact version", "1.0.0", true},
+		{"with pre-release", ">=1.0.0-rc1", true},
+		{"two-part version", ">=1.0", true},
+		{"with v prefix", ">=v1.0.0", true},
+		{"bare string", "not-a-range", false},
+		{"empty", "", false},
+		{"only operator", ">=", false},
+		{"single number", "1", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := rules.ValidateSemverRange(tt.value)
+			if got != tt.valid {
+				t.Errorf("ValidateSemverRange(%q) = %v, want %v", tt.value, got, tt.valid)
+			}
+		})
+	}
+}
+
 func TestSeverityString(t *testing.T) {
 	if rules.SeverityError.String() != "error" {
 		t.Errorf("expected 'error', got %q", rules.SeverityError.String())

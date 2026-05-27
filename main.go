@@ -13,6 +13,14 @@ import (
 
 var version = "dev"
 
+func splitAndTrim(s string) []string {
+	parts := strings.Split(s, ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
+
 func main() {
 	var (
 		path        string
@@ -50,14 +58,14 @@ func main() {
 		return
 	}
 
-	paths := strings.Split(path, ",")
+	paths := splitAndTrim(path)
 	var excludePaths []string
 	if exclude != "" {
-		excludePaths = strings.Split(exclude, ",")
+		excludePaths = splitAndTrim(exclude)
 	}
 	var allowedAnnotations []string
 	if allow != "" {
-		allowedAnnotations = strings.Split(allow, ",")
+		allowedAnnotations = splitAndTrim(allow)
 	}
 
 	violations, err := linter.Run(linter.Options{

@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/openshift-kni/olm-annotation-lint/pkg/rules"
@@ -128,6 +127,11 @@ func lintFile(path string, allowedAnnotations []string) ([]Violation, error) {
 }
 
 func LintData(data []byte, source string, allowedAnnotations []string) ([]Violation, error) {
+	allowSet := make(map[string]bool, len(allowedAnnotations))
+	for _, a := range allowedAnnotations {
+		allowSet[a] = true
+	}
+
 	var violations []Violation
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 
@@ -170,7 +174,7 @@ func LintData(data []byte, source string, allowedAnnotations []string) ([]Violat
 
 			line := annotationLines[key]
 
-			v := validateAnnotation(source, line, key, value, resource.Kind, allowedAnnotations)
+			v := validateAnnotation(source, line, key, value, resource.Kind, allowSet)
 			violations = append(violations, v...)
 		}
 	}
@@ -178,7 +182,7 @@ func LintData(data []byte, source string, allowedAnnotations []string) ([]Violat
 	return violations, nil
 }
 
-func validateAnnotation(file string, line int, key, value, kind string, allowedAnnotations []string) []Violation {
+func validateAnnotation(file string, line int, key, value, kind string, allowedAnnotations map[string]bool) []Violation {
 	var violations []Violation
 
 	newViolation := func(sev rules.Severity, msg string) Violation {
@@ -197,7 +201,7 @@ func validateAnnotation(file string, line int, key, value, kind string, allowedA
 			return violations
 		}
 
-		if slices.Contains(allowedAnnotations, key) {
+		if allowedAnnotations[key] {
 			violations = append(violations, newViolation(rules.SeverityInfo,
 				fmt.Sprintf("annotation %q allowed via user override", key)))
 			return violations

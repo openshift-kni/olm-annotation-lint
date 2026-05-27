@@ -25,12 +25,19 @@ func main() {
 	)
 
 	flag.StringVar(&path, "path", ".", "Path or comma-separated paths to scan")
+	flag.StringVar(&path, "p", ".", "Path or comma-separated paths to scan (shorthand)")
 	flag.StringVar(&exclude, "exclude", "", "Comma-separated paths to exclude")
+	flag.StringVar(&exclude, "e", "", "Comma-separated paths to exclude (shorthand)")
 	flag.StringVar(&allow, "allow", "", "Comma-separated annotation keys to allow (bypass unknown annotation errors)")
+	flag.StringVar(&allow, "a", "", "Comma-separated annotation keys to allow (shorthand)")
 	flag.BoolVar(&strict, "strict", false, "Treat warnings as errors")
+	flag.BoolVar(&strict, "s", false, "Treat warnings as errors (shorthand)")
 	flag.StringVar(&format, "format", "text", "Output format: text, json, github")
+	flag.StringVar(&format, "f", "text", "Output format: text, json, github (shorthand)")
 	flag.BoolVar(&showVersion, "version", false, "Print version and exit")
+	flag.BoolVar(&showVersion, "v", false, "Print version and exit (shorthand)")
 	flag.BoolVar(&listRules, "list-rules", false, "List all known OLM annotations and exit")
+	flag.BoolVar(&listRules, "l", false, "List all known OLM annotations and exit (shorthand)")
 	flag.Parse()
 
 	if showVersion {

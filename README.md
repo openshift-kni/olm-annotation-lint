@@ -140,25 +140,38 @@ go install github.com/openshift-kni/olm-annotation-lint@latest
 
 # Scan a directory
 olm-annotation-lint --path /path/to/manifests
+olm-annotation-lint -p /path/to/manifests
 
 # Multiple paths, exclude vendor
-olm-annotation-lint --path path1,path2 --exclude vendor
+olm-annotation-lint -p path1,path2 -e vendor
 
 # JSON output
-olm-annotation-lint --path . --format json
+olm-annotation-lint -p . -f json
 
 # Strict mode (warnings are errors)
-olm-annotation-lint --path . --strict
+olm-annotation-lint -p . -s
 
 # Allow specific annotations not yet in the hardcoded list
-olm-annotation-lint --path . --allow olm.operatorframework.io/bundle-install-timeout
+olm-annotation-lint -p . -a olm.operatorframework.io/bundle-install-timeout
 
 # Print version
-olm-annotation-lint --version
+olm-annotation-lint -v
 
 # List all known OLM annotations
-olm-annotation-lint --list-rules
+olm-annotation-lint -l
 ```
+
+All flags support both long and short forms:
+
+| Long | Short | Description |
+|------|-------|-------------|
+| `--path` | `-p` | Path or comma-separated paths to scan |
+| `--exclude` | `-e` | Comma-separated paths to exclude |
+| `--allow` | `-a` | Comma-separated annotation keys to allow |
+| `--strict` | `-s` | Treat warnings as errors |
+| `--format` | `-f` | Output format: text, json, github |
+| `--version` | `-v` | Print version and exit |
+| `--list-rules` | `-l` | List all known OLM annotations and exit |
 
 ### Exit Codes
 

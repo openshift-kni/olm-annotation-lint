@@ -74,10 +74,11 @@ func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([
 		}
 		if d.IsDir() {
 			for _, ex := range exclude {
-				if matched, _ := filepath.Match(ex, d.Name()); matched {
-					return filepath.SkipDir
+				matched, err := filepath.Match(ex, d.Name())
+				if err != nil {
+					return fmt.Errorf("invalid exclude pattern %q: %w", ex, err)
 				}
-				if strings.Contains(path, ex) {
+				if matched {
 					return filepath.SkipDir
 				}
 			}
@@ -210,6 +211,11 @@ func validateAnnotation(file string, line int, key, value, kind string, allowedA
 		if !rules.ValidateTemplate(value) {
 			violations = append(violations, newViolation(rules.SeverityError,
 				fmt.Sprintf("invalid template value %q, unbalanced curly braces", value)))
+		}
+	case rules.FormatSemverRange:
+		if !rules.ValidateSemverRange(value) {
+			violations = append(violations, newViolation(rules.SeverityError,
+				fmt.Sprintf("invalid semver range %q, expected format like >=1.0.0 <2.0.0", value)))
 		}
 	}
 

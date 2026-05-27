@@ -92,6 +92,20 @@ func TestBadTemplateValue(t *testing.T) {
 	}
 }
 
+func TestBadSemverRange(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/bad_semver_range.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := findViolation(violations, "olm.skipRange", "invalid semver range")
+	if !found {
+		t.Error("expected violation for bad semver range")
+	}
+}
+
 func TestWrongPrefix(t *testing.T) {
 	violations, err := linter.Run(linter.Options{
 		Paths: []string{"../../testdata/invalid/wrong_prefix.yaml"},

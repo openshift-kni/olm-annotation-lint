@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -34,6 +35,7 @@ const (
 	FormatDuration
 	FormatJSON
 	FormatTemplate
+	FormatSemverRange
 )
 
 type AnnotationRule struct {
@@ -77,7 +79,7 @@ var userSettable = []AnnotationRule{
 		Key:           "olm.skipRange",
 		ResourceKinds: []string{"ClusterServiceVersion"},
 		UserSettable:  true,
-		Format:        FormatString,
+		Format:        FormatSemverRange,
 		Description:   "Version range to skip during upgrades",
 	},
 	{
@@ -207,6 +209,41 @@ func ValidateTemplate(value string) bool {
 	return depth == 0
 }
 
+func ValidateSemverRange(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	operators := []string{">=", "<=", "!=", ">", "<", "="}
+	for _, token := range strings.Fields(value) {
+		for _, op := range operators {
+			if strings.HasPrefix(token, op) {
+				token = token[len(op):]
+				break
+			}
+		}
+		if !isVersion(token) {
+			return false
+		}
+	}
+	return true
+}
+
+func isVersion(s string) bool {
+	s = strings.TrimPrefix(s, "v")
+	parts := strings.SplitN(s, "-", 2)
+	segments := strings.Split(parts[0], ".")
+	if len(segments) < 2 {
+		return false
+	}
+	for _, seg := range segments {
+		if _, err := strconv.Atoi(seg); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
 func formatName(f ValueFormat) string {
 	switch f {
 	case FormatDuration:
@@ -215,6 +252,8 @@ func formatName(f ValueFormat) string {
 		return "JSON"
 	case FormatTemplate:
 		return "template"
+	case FormatSemverRange:
+		return "semver range"
 	default:
 		return "string"
 	}

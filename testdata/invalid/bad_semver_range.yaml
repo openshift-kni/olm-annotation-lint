@@ -1,0 +1,10 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    olm.skipRange: "not-a-range"
+  name: test-operator.v2.0.0
+  namespace: test-namespace
+spec:
+  displayName: Test Operator

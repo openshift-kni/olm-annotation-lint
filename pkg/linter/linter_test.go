@@ -353,6 +353,212 @@ spec:
 	}
 }
 
+func TestMalformedYAML(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/malformed_yaml.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) == 0 {
+		t.Fatal("expected at least one violation for malformed YAML")
+	}
+	found := false
+	for _, v := range violations {
+		if v.Severity == rules.SeverityWarning && strings.Contains(v.Message, "YAML parse error") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected YAML parse error warning")
+	}
+}
+
+func TestInvalidK8sResource(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/valid/invalid_k8s_resource.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		for _, v := range violations {
+			if v.Severity == rules.SeverityError {
+				t.Errorf("invalid k8s resource (missing apiVersion) should be silently skipped, got error: %s", v.Message)
+			}
+		}
+	}
+}
+
+func TestEmptyAnnotations(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/valid/empty_annotations.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		t.Errorf("expected no violations for empty annotations map, got %d", len(violations))
+	}
+}
+
+func TestNonOLMAnnotationsOnly(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/valid/non_olm_annotations_only.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		t.Errorf("expected no violations for non-OLM annotations, got %d", len(violations))
+	}
+}
+
+func TestMultiDocumentAllInvalid(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/multi_document_all_invalid.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) < 3 {
+		t.Errorf("expected at least 3 violations (one per document), got %d", len(violations))
+	}
+	expectedViolations := []struct {
+		annotation string
+		message    string
+	}{
+		{"olm.unknown-annotation", "unknown OLM annotation"},
+		{"operatorframework.io/bundle-unpack-timeout", "is not valid on Subscription"},
+		{"olm.skipRange", "invalid semver range"},
+	}
+	for _, expected := range expectedViolations {
+		if !findViolation(violations, expected.annotation, expected.message) {
+			t.Errorf("expected violation for %s: %s", expected.annotation, expected.message)
+		}
+	}
+}
+
+func TestWhitespaceOnlyFile(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/valid/whitespace_only.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		t.Errorf("expected no violations for whitespace-only file, got %d", len(violations))
+	}
+}
+
+func TestMultipleViolationsSingleResource(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/multiple_violations_single_resource.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) < 4 {
+		t.Errorf("expected at least 4 violations, got %d", len(violations))
+	}
+	expectedViolations := []struct {
+		annotation string
+		message    string
+		severity   rules.Severity
+	}{
+		{"olm.skipRange", "invalid semver range", rules.SeverityError},
+		{"olm.unknown-annotation", "unknown OLM annotation", rules.SeverityError},
+		{"OLM.providedAPIs", "wrong casing", rules.SeverityError},
+		{"olm.operatorGroup", "controller-managed", rules.SeverityWarning},
+	}
+	for _, expected := range expectedViolations {
+		found := false
+		for _, v := range violations {
+			if v.Annotation == expected.annotation && strings.Contains(v.Message, expected.message) {
+				if v.Severity != expected.severity {
+					t.Errorf("expected severity %s for %s, got %s", expected.severity, expected.annotation, v.Severity)
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected violation for %s: %s", expected.annotation, expected.message)
+		}
+	}
+}
+
+func TestDeeplyNestedStructure(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/valid/deeply_nested_structure.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, v := range violations {
+		if v.Severity == rules.SeverityError {
+			t.Errorf("unexpected error in deeply nested structure: %s: %s", v.Annotation, v.Message)
+		}
+	}
+}
+
+func TestNonExistentPath(t *testing.T) {
+	_, err := linter.Run(linter.Options{
+		Paths: []string{"/nonexistent/path"},
+	})
+	if err == nil {
+		t.Fatal("expected error for nonexistent path")
+	}
+	if !strings.Contains(err.Error(), "cannot access") {
+		t.Errorf("expected 'cannot access' error, got: %v", err)
+	}
+}
+
+func TestDirectoryWithNoYAMLFiles(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../pkg"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		t.Errorf("expected no violations for directory with no YAML files, got %d", len(violations))
+	}
+}
+
+func TestStdinMultipleTimesError(t *testing.T) {
+	_, err := linter.Run(linter.Options{
+		Paths: []string{"-", "-"},
+	})
+	if err == nil {
+		t.Fatal("expected error when stdin (-) specified multiple times")
+	}
+	if !strings.Contains(err.Error(), "stdin (-) can only be specified once") {
+		t.Errorf("expected stdin-specific error, got: %v", err)
+	}
+}
+
+func TestLintDataEmptyInput(t *testing.T) {
+	violations, err := linter.LintData([]byte(""), "<test>", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		t.Errorf("expected no violations for empty input, got %d", len(violations))
+	}
+}
+
+func TestLintDataNilInput(t *testing.T) {
+	violations, err := linter.LintData(nil, "<test>", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		t.Errorf("expected no violations for nil input, got %d", len(violations))
+	}
+}
+
 func findViolation(violations []linter.Violation, annotation, messageContains string) bool {
 	for _, v := range violations {
 		if v.Annotation == annotation {

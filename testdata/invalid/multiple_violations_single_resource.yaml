@@ -1,0 +1,11 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: test
+  annotations:
+    olm.skipRange: "not-a-semver"
+    olm.unknown-annotation: "value"
+    OLM.providedAPIs: "wrong-case"
+    olm.operatorGroup: "user-should-not-set-this"
+spec:
+  displayName: Test

@@ -1,0 +1,18 @@
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: test
+  labels:
+    app: test
+    nested:
+      deep:
+        value: true
+  annotations:
+    operatorframework.io/bundle-unpack-timeout: "5m"
+    non-olm-annotation: "value"
+spec:
+  targetNamespaces:
+  - test
+  selector:
+    matchLabels:
+      app: test

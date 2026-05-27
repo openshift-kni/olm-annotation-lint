@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test
+  annotations:
+    key: "value
+    # Missing closing quote
+data:
+  foo: bar

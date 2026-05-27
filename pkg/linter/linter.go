@@ -195,9 +195,22 @@ func validateAnnotation(file string, line int, key, value, kind string, allowedA
 			fmt.Sprintf("annotation is not valid on %s, expected one of: %s", kind, strings.Join(rule.ResourceKinds, ", "))))
 	}
 
-	if rule.Format == rules.FormatDuration && !rules.ValidateDuration(value) {
-		violations = append(violations, newViolation(rules.SeverityError,
-			fmt.Sprintf("invalid duration value %q, expected format like 10m, 1h30m, 5s", value)))
+	switch rule.Format {
+	case rules.FormatDuration:
+		if !rules.ValidateDuration(value) {
+			violations = append(violations, newViolation(rules.SeverityError,
+				fmt.Sprintf("invalid duration value %q, expected format like 10m, 1h30m, 5s", value)))
+		}
+	case rules.FormatJSON:
+		if !rules.ValidateJSON(value) {
+			violations = append(violations, newViolation(rules.SeverityError,
+				fmt.Sprintf("invalid JSON value %q", value)))
+		}
+	case rules.FormatTemplate:
+		if !rules.ValidateTemplate(value) {
+			violations = append(violations, newViolation(rules.SeverityError,
+				fmt.Sprintf("invalid template value %q, unbalanced curly braces", value)))
+		}
 	}
 
 	return violations

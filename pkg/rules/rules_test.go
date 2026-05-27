@@ -130,6 +130,57 @@ func TestValidateDuration(t *testing.T) {
 	}
 }
 
+func TestValidateJSON(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{"valid object", `{"metadata":{"labels":{"key":"value"}}}`, true},
+		{"valid array", `["a","b"]`, true},
+		{"valid string", `"just a string"`, true},
+		{"valid number", `42`, true},
+		{"bare string", "not-json", false},
+		{"truncated object", "{bad json", false},
+		{"empty", "", false},
+		{"unclosed brace", `{"unclosed": "brace"`, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := rules.ValidateJSON(tt.value)
+			if got != tt.valid {
+				t.Errorf("ValidateJSON(%q) = %v, want %v", tt.value, got, tt.valid)
+			}
+		})
+	}
+}
+
+func TestValidateTemplate(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{"with vars", "quay.io/example/catalog:v{kube_major_version}.{kube_minor_version}", true},
+		{"plain string", "quay.io/example/catalog:latest", true},
+		{"single var", "image:{tag}", true},
+		{"empty", "", true},
+		{"unclosed brace", "quay.io/example:{unclosed", false},
+		{"extra close", "quay.io/example:closed}", false},
+		{"nested braces", "quay.io/example:{{nested}}", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := rules.ValidateTemplate(tt.value)
+			if got != tt.valid {
+				t.Errorf("ValidateTemplate(%q) = %v, want %v", tt.value, got, tt.valid)
+			}
+		})
+	}
+}
+
 func TestSeverityString(t *testing.T) {
 	if rules.SeverityError.String() != "error" {
 		t.Errorf("expected 'error', got %q", rules.SeverityError.String())

@@ -40,8 +40,26 @@ type Options struct {
 
 func Run(opts Options) ([]Violation, error) {
 	var allViolations []Violation
+	stdinConsumed := false
 
 	for _, p := range opts.Paths {
+		if p == "-" {
+			if stdinConsumed {
+				return nil, fmt.Errorf("stdin (-) can only be specified once")
+			}
+			stdinConsumed = true
+			data, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return nil, fmt.Errorf("reading stdin: %w", err)
+			}
+			violations, err := LintData(data, "<stdin>", opts.AllowedAnnotations)
+			if err != nil {
+				return nil, err
+			}
+			allViolations = append(allViolations, violations...)
+			continue
+		}
+
 		info, err := os.Stat(p)
 		if err != nil {
 			return nil, fmt.Errorf("cannot access %s: %w", p, err)
@@ -106,7 +124,10 @@ func lintFile(path string, allowedAnnotations []string) ([]Violation, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
+	return LintData(data, path, allowedAnnotations)
+}
 
+func LintData(data []byte, source string, allowedAnnotations []string) ([]Violation, error) {
 	var violations []Violation
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 
@@ -118,7 +139,7 @@ func lintFile(path string, allowedAnnotations []string) ([]Violation, error) {
 		}
 		if err != nil {
 			violations = append(violations, Violation{
-				File:     path,
+				File:     source,
 				Severity: rules.SeverityWarning,
 				Message:  fmt.Sprintf("YAML parse error: %v", err),
 			})
@@ -128,7 +149,7 @@ func lintFile(path string, allowedAnnotations []string) ([]Violation, error) {
 		var resource k8sResource
 		if err := node.Decode(&resource); err != nil {
 			violations = append(violations, Violation{
-				File:     path,
+				File:     source,
 				Line:     node.Line,
 				Severity: rules.SeverityWarning,
 				Message:  fmt.Sprintf("cannot decode as Kubernetes resource: %v", err),
@@ -149,7 +170,7 @@ func lintFile(path string, allowedAnnotations []string) ([]Violation, error) {
 
 			line := annotationLines[key]
 
-			v := validateAnnotation(path, line, key, value, resource.Kind, allowedAnnotations)
+			v := validateAnnotation(source, line, key, value, resource.Kind, allowedAnnotations)
 			violations = append(violations, v...)
 		}
 	}

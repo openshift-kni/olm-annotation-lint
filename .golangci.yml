@@ -1,0 +1,16 @@
+version: "2"
+linters:
+  enable:
+    - copyloopvar
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - bodyclose
+    - nilerr
+    - errorlint
+formatters:
+  enable:
+    - gofmt

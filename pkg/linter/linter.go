@@ -2,6 +2,7 @@ package linter
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -138,7 +139,7 @@ func LintData(data []byte, source string, allowedAnnotations []string) ([]Violat
 	for {
 		var node yaml.Node
 		err := decoder.Decode(&node)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

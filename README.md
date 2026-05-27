@@ -122,6 +122,7 @@ Add `.local/` to your `.gitignore` to keep the cached binary out of version cont
     exclude: "vendor,testdata"
     strict: "false"
     allow: "olm.operatorframework.io/bundle-install-timeout"
+    format: "github"
 ```
 
 ### Inputs
@@ -132,6 +133,7 @@ Add `.local/` to your `.gitignore` to keep the cached binary out of version cont
 | `exclude` | Comma-separated paths to exclude | |
 | `strict` | Treat warnings as errors | `false` |
 | `allow` | Comma-separated annotation keys to bypass unknown annotation errors | |
+| `format` | Output format: `text`, `json`, `github` | `github` |
 
 ## Usage as CLI
 

@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -181,6 +182,29 @@ func IsValidResourceKind(rule AnnotationRule, kind string) bool {
 func ValidateDuration(value string) bool {
 	_, err := time.ParseDuration(value)
 	return err == nil
+}
+
+func ValidateJSON(value string) bool {
+	return json.Valid([]byte(value))
+}
+
+func ValidateTemplate(value string) bool {
+	depth := 0
+	for _, ch := range value {
+		switch ch {
+		case '{':
+			depth++
+			if depth > 1 {
+				return false
+			}
+		case '}':
+			depth--
+			if depth < 0 {
+				return false
+			}
+		}
+	}
+	return depth == 0
 }
 
 func formatName(f ValueFormat) string {

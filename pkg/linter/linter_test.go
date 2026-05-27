@@ -64,6 +64,34 @@ func TestBadDurationValue(t *testing.T) {
 	}
 }
 
+func TestBadJSONValue(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/bad_json_value.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := findViolation(violations, "operatorframework.io/suggested-namespace-template", "invalid JSON value")
+	if !found {
+		t.Error("expected violation for bad JSON value")
+	}
+}
+
+func TestBadTemplateValue(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/bad_template_value.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := findViolation(violations, "olm.catalogImageTemplate", "invalid template value")
+	if !found {
+		t.Error("expected violation for bad template value")
+	}
+}
+
 func TestWrongPrefix(t *testing.T) {
 	violations, err := linter.Run(linter.Options{
 		Paths: []string{"../../testdata/invalid/wrong_prefix.yaml"},

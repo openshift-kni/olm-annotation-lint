@@ -1,0 +1,28 @@
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: test-og
+  annotations:
+    olm.unknown-annotation: "value"
+spec:
+  targetNamespaces:
+  - test
+---
+apiVersion: operators.coreos.com/v1alpha2
+kind: Subscription
+metadata:
+  name: test-sub
+  annotations:
+    operatorframework.io/bundle-unpack-timeout: "10m"
+spec:
+  channel: stable
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: test-csv
+  annotations:
+    olm.skipRange: "not-a-semver"
+spec:
+  displayName: Test

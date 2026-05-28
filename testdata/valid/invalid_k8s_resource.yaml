@@ -1,0 +1,6 @@
+# Invalid: missing apiVersion
+kind: OperatorGroup
+metadata:
+  name: test
+  annotations:
+    operatorframework.io/bundle-unpack-timeout: "10m"

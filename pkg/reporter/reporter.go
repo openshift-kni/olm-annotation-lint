@@ -63,7 +63,9 @@ func reportJSON(w io.Writer, violations []linter.Violation) {
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	enc.Encode(jvs) //nolint:errcheck
+	if err := enc.Encode(jvs); err != nil {
+		_, _ = fmt.Fprintf(w, "error encoding JSON: %v\n", err)
+	}
 }
 
 func reportGitHub(w io.Writer, violations []linter.Violation) {

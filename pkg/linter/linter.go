@@ -120,7 +120,7 @@ func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([
 }
 
 func lintFile(path string, allowedAnnotations []string) ([]Violation, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // lint target path is user-specified CLI input
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}

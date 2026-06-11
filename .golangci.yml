@@ -11,6 +11,7 @@ linters:
     - bodyclose
     - nilerr
     - errorlint
+    - gosec
 formatters:
   enable:
     - gofmt

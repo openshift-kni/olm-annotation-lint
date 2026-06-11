@@ -169,7 +169,7 @@ func main() {
 	}
 
 	if len(violations) > 0 {
-		reporter.Report(os.Stdout, violations, outputFormat)
+		reporter.Report(os.Stdout, violations, outputFormat, version)
 	}
 
 	var errorCount, warningCount int

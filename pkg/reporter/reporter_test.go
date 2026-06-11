@@ -32,7 +32,7 @@ var testViolations = []linter.Violation{
 
 func TestReportText(t *testing.T) {
 	var buf bytes.Buffer
-	reporter.Report(&buf, testViolations, reporter.FormatText)
+	reporter.Report(&buf, testViolations, reporter.FormatText, "1.0.0")
 
 	output := buf.String()
 	if !strings.Contains(output, "test.yaml:5") {
@@ -48,20 +48,40 @@ func TestReportText(t *testing.T) {
 
 func TestReportJSON(t *testing.T) {
 	var buf bytes.Buffer
-	reporter.Report(&buf, testViolations, reporter.FormatJSON)
+	reporter.Report(&buf, testViolations, reporter.FormatJSON, "1.0.0")
 
-	var result []map[string]interface{}
+	var result struct {
+		Version string `json:"version"`
+		Summary struct {
+			Errors   int `json:"errors"`
+			Warnings int `json:"warnings"`
+			Total    int `json:"total"`
+		} `json:"summary"`
+		Violations []map[string]interface{} `json:"violations"`
+	}
 	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
 		t.Fatalf("invalid JSON output: %v", err)
 	}
-	if len(result) != 2 {
-		t.Errorf("expected 2 violations in JSON, got %d", len(result))
+	if result.Version != "1.0.0" {
+		t.Errorf("expected version 1.0.0, got %s", result.Version)
+	}
+	if result.Summary.Errors != 1 {
+		t.Errorf("expected 1 error in summary, got %d", result.Summary.Errors)
+	}
+	if result.Summary.Warnings != 1 {
+		t.Errorf("expected 1 warning in summary, got %d", result.Summary.Warnings)
+	}
+	if result.Summary.Total != 2 {
+		t.Errorf("expected 2 total in summary, got %d", result.Summary.Total)
+	}
+	if len(result.Violations) != 2 {
+		t.Errorf("expected 2 violations in JSON, got %d", len(result.Violations))
 	}
 }
 
 func TestReportGitHub(t *testing.T) {
 	var buf bytes.Buffer
-	reporter.Report(&buf, testViolations, reporter.FormatGitHub)
+	reporter.Report(&buf, testViolations, reporter.FormatGitHub, "1.0.0")
 
 	output := buf.String()
 	if !strings.Contains(output, "::error file=test.yaml,line=5::") {
@@ -84,7 +104,7 @@ func TestReportGitHubNotice(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	reporter.Report(&buf, infoViolations, reporter.FormatGitHub)
+	reporter.Report(&buf, infoViolations, reporter.FormatGitHub, "1.0.0")
 	output := buf.String()
 	if !strings.Contains(output, "::notice file=test.yaml,line=5::") {
 		t.Errorf("expected GitHub notice annotation, got: %s", output)

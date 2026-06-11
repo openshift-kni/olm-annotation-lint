@@ -60,8 +60,30 @@ custom path. CLI flags always take precedence over config file values.
 ## Output Formats
 
 - `text` (default) — human-readable with file:line references
-- `json` — structured output for tooling
+- `json` — structured report with summary counts and violation details
 - `github` — GitHub Actions annotation format
+
+### JSON Format
+
+```json
+{
+  "version": "1.0.8",
+  "summary": {
+    "errors": 1,
+    "warnings": 1,
+    "total": 2
+  },
+  "violations": [
+    {
+      "file": "manifests/csv.yaml",
+      "line": 12,
+      "annotation": "olm.fakeAnnotation",
+      "kind": "ClusterServiceVersion",
+      "severity": "error",
+      "message": "unknown OLM annotation"
+    }
+  ]
+}
 
 ---
 

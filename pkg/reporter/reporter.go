@@ -18,10 +18,10 @@ const (
 	FormatGitHub
 )
 
-func Report(w io.Writer, violations []linter.Violation, format Format) {
+func Report(w io.Writer, violations []linter.Violation, format Format, version string) {
 	switch format {
 	case FormatJSON:
-		reportJSON(w, violations)
+		reportJSON(w, violations, version)
 	case FormatGitHub:
 		reportGitHub(w, violations)
 	default:
@@ -49,8 +49,21 @@ type jsonViolation struct {
 	Message    string `json:"message"`
 }
 
-func reportJSON(w io.Writer, violations []linter.Violation) {
+type jsonSummary struct {
+	Errors   int `json:"errors"`
+	Warnings int `json:"warnings"`
+	Total    int `json:"total"`
+}
+
+type jsonReport struct {
+	Version    string          `json:"version"`
+	Summary    jsonSummary     `json:"summary"`
+	Violations []jsonViolation `json:"violations"`
+}
+
+func reportJSON(w io.Writer, violations []linter.Violation, ver string) {
 	jvs := make([]jsonViolation, 0, len(violations))
+	var errors, warnings int
 	for _, v := range violations {
 		jvs = append(jvs, jsonViolation{
 			File:       v.File,
@@ -60,10 +73,25 @@ func reportJSON(w io.Writer, violations []linter.Violation) {
 			Severity:   v.Severity.String(),
 			Message:    v.Message,
 		})
+		switch v.Severity {
+		case rules.SeverityError:
+			errors++
+		case rules.SeverityWarning:
+			warnings++
+		}
+	}
+	report := jsonReport{
+		Version: ver,
+		Summary: jsonSummary{
+			Errors:   errors,
+			Warnings: warnings,
+			Total:    len(violations),
+		},
+		Violations: jvs,
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(jvs); err != nil {
+	if err := enc.Encode(report); err != nil {
 		_, _ = fmt.Fprintf(w, "error encoding JSON: %v\n", err)
 	}
 }

@@ -5,7 +5,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -ldflags "-s -w" -o /bin/olm-annotation-lint .
 
-FROM alpine:3.23
+FROM alpine:3.24
 LABEL org.opencontainers.image.source="https://github.com/openshift-kni/olm-annotation-lint"
 LABEL org.opencontainers.image.description="Validates OLM annotations on Kubernetes resources"
 LABEL org.opencontainers.image.licenses="Apache-2.0"

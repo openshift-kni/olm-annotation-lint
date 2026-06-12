@@ -23,7 +23,7 @@ inputs:
     default: "github"
 runs:
   using: docker
-  image: Dockerfile
+  image: docker://quay.io/bapalm/olm-annotation-lint:v1
   args:
     - "--path"
     - ${{ inputs.path }}

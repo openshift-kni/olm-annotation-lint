@@ -20,7 +20,10 @@ jobs:
           go-version-file: go.mod
       - name: Extract version tag
         id: version
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "major=${TAG%%.*}" >> "$GITHUB_OUTPUT"
       - name: Build binaries
         run: |
           VERSION=${{ steps.version.outputs.tag }}
@@ -62,4 +65,5 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE }}:${{ steps.version.outputs.tag }}
+            ${{ env.IMAGE }}:${{ steps.version.outputs.major }}
             ${{ env.IMAGE }}:latest

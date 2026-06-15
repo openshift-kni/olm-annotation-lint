@@ -559,6 +559,100 @@ func TestLintDataNilInput(t *testing.T) {
 	}
 }
 
+func TestLintDataWithAllowedAnnotations(t *testing.T) {
+	data := []byte(`---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  annotations:
+    olm.custom-annotation: "some-value"
+  name: test
+  namespace: test
+spec:
+  upgradeStrategy: Default
+`)
+	violations, err := linter.LintData(data, "<test>", []string{"olm.custom-annotation"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, v := range violations {
+		if v.Annotation == "olm.custom-annotation" {
+			if v.Severity != rules.SeverityInfo {
+				t.Errorf("expected info severity for allowed annotation, got %s", v.Severity)
+			}
+			if !strings.Contains(v.Message, "allowed via user override") {
+				t.Errorf("expected override message, got %q", v.Message)
+			}
+			return
+		}
+	}
+	t.Error("expected an info-level notice for the allowed annotation")
+}
+
+func TestExcludeMultiplePatterns(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths:   []string{"../../testdata"},
+		Exclude: []string{"invalid", "valid"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		t.Errorf("expected no violations when excluding both dirs, got %d", len(violations))
+	}
+}
+
+func TestMultiplePathsValid(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{
+			"../../testdata/valid/csv_with_skip_range.yaml",
+			"../../testdata/valid/operatorgroup_with_unpack_timeout.yaml",
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, v := range violations {
+		if v.Severity == rules.SeverityError {
+			t.Errorf("unexpected error in valid files: %s: %s", v.Annotation, v.Message)
+		}
+	}
+}
+
+func TestMultiplePathsMixed(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{
+			"../../testdata/valid/csv_with_skip_range.yaml",
+			"../../testdata/invalid/unknown_olm_annotation.yaml",
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "unknown OLM annotation")
+	if !found {
+		t.Error("expected violation from the invalid file in multi-path scan")
+	}
+}
+
+func TestLintDataMalformedYAML(t *testing.T) {
+	data := []byte("key: [\ninvalid yaml")
+	violations, err := linter.LintData(data, "<test>", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, v := range violations {
+		if v.Severity == rules.SeverityWarning && strings.Contains(v.Message, "YAML parse error") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected a warning for malformed YAML in LintData")
+	}
+}
+
 func findViolation(violations []linter.Violation, annotation, messageContains string) bool {
 	for _, v := range violations {
 		if v.Annotation == annotation {

@@ -130,6 +130,91 @@ func TestHasErrorsIgnoresInfo(t *testing.T) {
 	}
 }
 
+func TestReportTextNoLineNumber(t *testing.T) {
+	violations := []linter.Violation{
+		{
+			File:       "test.yaml",
+			Line:       0,
+			Annotation: "olm.fake",
+			Kind:       "OperatorGroup",
+			Severity:   rules.SeverityError,
+			Message:    "unknown OLM annotation",
+		},
+	}
+	var buf bytes.Buffer
+	reporter.Report(&buf, violations, reporter.FormatText, "1.0.0")
+	output := buf.String()
+	if strings.Contains(output, "test.yaml:0") {
+		t.Error("line 0 should not appear as :0 in text output")
+	}
+	if !strings.Contains(output, "test.yaml: [ERROR]") {
+		t.Errorf("expected 'test.yaml: [ERROR]' format without line number, got: %s", output)
+	}
+}
+
+func TestReportGitHubNoLineNumber(t *testing.T) {
+	violations := []linter.Violation{
+		{
+			File:       "test.yaml",
+			Line:       0,
+			Annotation: "olm.fake",
+			Kind:       "OperatorGroup",
+			Severity:   rules.SeverityError,
+			Message:    "unknown OLM annotation",
+		},
+	}
+	var buf bytes.Buffer
+	reporter.Report(&buf, violations, reporter.FormatGitHub, "1.0.0")
+	output := buf.String()
+	if strings.Contains(output, "line=0") {
+		t.Error("line 0 should not appear in GitHub output")
+	}
+	if !strings.Contains(output, "::error file=test.yaml::") {
+		t.Errorf("expected GitHub format without line number, got: %s", output)
+	}
+}
+
+func TestReportJSONEmptyViolations(t *testing.T) {
+	var buf bytes.Buffer
+	reporter.Report(&buf, []linter.Violation{}, reporter.FormatJSON, "1.0.0")
+	var result struct {
+		Version    string              `json:"version"`
+		Summary    struct{ Total int } `json:"summary"`
+		Violations []interface{}       `json:"violations"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON for empty violations: %v", err)
+	}
+	if result.Summary.Total != 0 {
+		t.Errorf("expected 0 total, got %d", result.Summary.Total)
+	}
+	if len(result.Violations) != 0 {
+		t.Errorf("expected empty violations array, got %d", len(result.Violations))
+	}
+}
+
+func TestReportGitHubNewlineEscaping(t *testing.T) {
+	violations := []linter.Violation{
+		{
+			File:       "test.yaml",
+			Line:       5,
+			Annotation: "olm.fake",
+			Kind:       "OperatorGroup",
+			Severity:   rules.SeverityError,
+			Message:    "line one\nline two",
+		},
+	}
+	var buf bytes.Buffer
+	reporter.Report(&buf, violations, reporter.FormatGitHub, "1.0.0")
+	output := buf.String()
+	if strings.Contains(output, "line one\nline two") {
+		t.Error("newlines should be escaped in GitHub format")
+	}
+	if !strings.Contains(output, "line one%0Aline two") {
+		t.Errorf("expected %%0A escaping, got: %s", output)
+	}
+}
+
 func TestHasErrors(t *testing.T) {
 	if !reporter.HasErrors(testViolations, false) {
 		t.Error("expected HasErrors to return true with error violations")

@@ -18,7 +18,7 @@ inputs:
     required: false
     default: ""
   format:
-    description: "Output format: text, json, github"
+    description: "Output format: text, json, github, junit"
     required: false
     default: "github"
 outputs:

@@ -3,6 +3,7 @@ package reporter_test
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"strings"
 	"testing"
 
@@ -212,6 +213,142 @@ func TestReportGitHubNewlineEscaping(t *testing.T) {
 	}
 	if !strings.Contains(output, "line one%0Aline two") {
 		t.Errorf("expected %%0A escaping, got: %s", output)
+	}
+}
+
+func TestReportJUnit(t *testing.T) {
+	var buf bytes.Buffer
+	reporter.Report(&buf, testViolations, reporter.FormatJUnit, "1.0.0")
+
+	output := buf.String()
+	if !strings.HasPrefix(output, "<?xml") {
+		t.Error("expected XML declaration")
+	}
+
+	var result struct {
+		XMLName    xml.Name `xml:"testsuites"`
+		TestSuites []struct {
+			Name     string `xml:"name,attr"`
+			Tests    int    `xml:"tests,attr"`
+			Failures int    `xml:"failures,attr"`
+			Cases    []struct {
+				Name      string `xml:"name,attr"`
+				Classname string `xml:"classname,attr"`
+				Failure   *struct {
+					Message string `xml:"message,attr"`
+					Type    string `xml:"type,attr"`
+				} `xml:"failure"`
+			} `xml:"testcase"`
+		} `xml:"testsuite"`
+	}
+	if err := xml.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JUnit XML: %v", err)
+	}
+	if len(result.TestSuites) != 1 {
+		t.Fatalf("expected 1 testsuite, got %d", len(result.TestSuites))
+	}
+	suite := result.TestSuites[0]
+	if suite.Name != "olm-annotation-lint" {
+		t.Errorf("expected suite name olm-annotation-lint, got %s", suite.Name)
+	}
+	if suite.Tests != 2 {
+		t.Errorf("expected 2 tests, got %d", suite.Tests)
+	}
+	if suite.Failures != 2 {
+		t.Errorf("expected 2 failures, got %d", suite.Failures)
+	}
+	if len(suite.Cases) != 2 {
+		t.Fatalf("expected 2 test cases, got %d", len(suite.Cases))
+	}
+	if suite.Cases[0].Classname != "test.yaml" {
+		t.Errorf("expected classname test.yaml, got %s", suite.Cases[0].Classname)
+	}
+	if suite.Cases[0].Failure == nil {
+		t.Error("expected failure element on error violation")
+	}
+	if suite.Cases[0].Failure.Type != "error" {
+		t.Errorf("expected failure type 'error', got %s", suite.Cases[0].Failure.Type)
+	}
+}
+
+func TestReportJUnitEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	reporter.Report(&buf, []linter.Violation{}, reporter.FormatJUnit, "1.0.0")
+
+	var result struct {
+		XMLName    xml.Name `xml:"testsuites"`
+		TestSuites []struct {
+			Tests    int `xml:"tests,attr"`
+			Failures int `xml:"failures,attr"`
+		} `xml:"testsuite"`
+	}
+	if err := xml.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JUnit XML for empty violations: %v", err)
+	}
+	if result.TestSuites[0].Tests != 0 {
+		t.Errorf("expected 0 tests, got %d", result.TestSuites[0].Tests)
+	}
+	if result.TestSuites[0].Failures != 0 {
+		t.Errorf("expected 0 failures, got %d", result.TestSuites[0].Failures)
+	}
+}
+
+func TestReportJUnitInfoNotFailure(t *testing.T) {
+	infoViolations := []linter.Violation{
+		{
+			File:       "test.yaml",
+			Line:       5,
+			Annotation: "olm.custom",
+			Kind:       "OperatorGroup",
+			Severity:   rules.SeverityInfo,
+			Message:    "allowed via user override",
+		},
+	}
+	var buf bytes.Buffer
+	reporter.Report(&buf, infoViolations, reporter.FormatJUnit, "1.0.0")
+
+	var result struct {
+		XMLName    xml.Name `xml:"testsuites"`
+		TestSuites []struct {
+			Tests    int `xml:"tests,attr"`
+			Failures int `xml:"failures,attr"`
+			Cases    []struct {
+				Failure *struct{} `xml:"failure"`
+			} `xml:"testcase"`
+		} `xml:"testsuite"`
+	}
+	if err := xml.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JUnit XML: %v", err)
+	}
+	suite := result.TestSuites[0]
+	if suite.Failures != 0 {
+		t.Errorf("expected 0 failures for info-only violations, got %d", suite.Failures)
+	}
+	if suite.Cases[0].Failure != nil {
+		t.Error("expected no failure element for info-severity violation")
+	}
+}
+
+func TestReportJUnitXMLEscaping(t *testing.T) {
+	violations := []linter.Violation{
+		{
+			File:       "test.yaml",
+			Line:       5,
+			Annotation: "olm.fake",
+			Kind:       "OperatorGroup",
+			Severity:   rules.SeverityError,
+			Message:    `value "bad" contains <special> & chars`,
+		},
+	}
+	var buf bytes.Buffer
+	reporter.Report(&buf, violations, reporter.FormatJUnit, "1.0.0")
+
+	output := buf.String()
+	if strings.Contains(output, `<special>`) {
+		t.Error("expected XML escaping of angle brackets in message")
+	}
+	if !strings.Contains(output, "&lt;special&gt;") {
+		t.Errorf("expected escaped angle brackets, got: %s", output)
 	}
 }
 

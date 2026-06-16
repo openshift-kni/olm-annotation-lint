@@ -88,8 +88,8 @@ func main() {
 	flag.StringVar(&allow, "a", "", "Comma-separated annotation keys to allow (shorthand)")
 	flag.BoolVar(&strict, "strict", false, "Treat warnings as errors")
 	flag.BoolVar(&strict, "s", false, "Treat warnings as errors (shorthand)")
-	flag.StringVar(&format, "format", "text", "Output format: text, json, github")
-	flag.StringVar(&format, "f", "text", "Output format: text, json, github (shorthand)")
+	flag.StringVar(&format, "format", "text", "Output format: text, json, github, junit")
+	flag.StringVar(&format, "f", "text", "Output format: text, json, github, junit (shorthand)")
 	flag.StringVar(&configPath, "config", "", "Path to config file (default: .olm-lint.yaml in current directory)")
 	flag.StringVar(&configPath, "c", "", "Path to config file (shorthand)")
 	flag.BoolVar(&showVersion, "version", false, "Print version and exit")
@@ -164,6 +164,8 @@ func main() {
 		outputFormat = reporter.FormatJSON
 	case "github":
 		outputFormat = reporter.FormatGitHub
+	case "junit":
+		outputFormat = reporter.FormatJUnit
 	default:
 		outputFormat = reporter.FormatText
 	}

@@ -2,6 +2,7 @@ package reporter
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"strings"
@@ -16,6 +17,7 @@ const (
 	FormatText Format = iota
 	FormatJSON
 	FormatGitHub
+	FormatJUnit
 )
 
 func Report(w io.Writer, violations []linter.Violation, format Format, version string) {
@@ -24,6 +26,8 @@ func Report(w io.Writer, violations []linter.Violation, format Format, version s
 		reportJSON(w, violations, version)
 	case FormatGitHub:
 		reportGitHub(w, violations)
+	case FormatJUnit:
+		reportJUnit(w, violations)
 	default:
 		reportText(w, violations)
 	}
@@ -105,6 +109,68 @@ func reportGitHub(w io.Writer, violations []linter.Violation) {
 			_, _ = fmt.Fprintf(w, "::%s file=%s::%s: %s\n", v.Severity, v.File, v.Annotation, msg)
 		}
 	}
+}
+
+type junitTestSuites struct {
+	XMLName    xml.Name         `xml:"testsuites"`
+	TestSuites []junitTestSuite `xml:"testsuite"`
+}
+
+type junitTestSuite struct {
+	Name     string          `xml:"name,attr"`
+	Tests    int             `xml:"tests,attr"`
+	Failures int             `xml:"failures,attr"`
+	Cases    []junitTestCase `xml:"testcase"`
+}
+
+type junitTestCase struct {
+	Name      string        `xml:"name,attr"`
+	Classname string        `xml:"classname,attr"`
+	Failure   *junitFailure `xml:"failure,omitempty"`
+}
+
+type junitFailure struct {
+	Message string `xml:"message,attr"`
+	Type    string `xml:"type,attr"`
+}
+
+func reportJUnit(w io.Writer, violations []linter.Violation) {
+	var failures int
+	cases := make([]junitTestCase, 0, len(violations))
+
+	for _, v := range violations {
+		tc := junitTestCase{
+			Name:      v.Annotation,
+			Classname: v.File,
+		}
+		if v.Severity == rules.SeverityError || v.Severity == rules.SeverityWarning {
+			tc.Failure = &junitFailure{
+				Message: v.Message,
+				Type:    v.Severity.String(),
+			}
+			failures++
+		}
+		cases = append(cases, tc)
+	}
+
+	suites := junitTestSuites{
+		TestSuites: []junitTestSuite{
+			{
+				Name:     "olm-annotation-lint",
+				Tests:    len(violations),
+				Failures: failures,
+				Cases:    cases,
+			},
+		},
+	}
+
+	_, _ = fmt.Fprint(w, xml.Header)
+	enc := xml.NewEncoder(w)
+	enc.Indent("", "  ")
+	if err := enc.Encode(suites); err != nil {
+		_, _ = fmt.Fprintf(w, "error encoding JUnit XML: %v\n", err)
+	}
+	_, _ = fmt.Fprintln(w)
 }
 
 func HasErrors(violations []linter.Violation, strict bool) bool {

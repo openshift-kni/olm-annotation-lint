@@ -23,7 +23,7 @@ All flags support both long and short forms:
 | `--exclude` | `-e` | Comma-separated paths to exclude |
 | `--allow` | `-a` | Comma-separated annotation keys to allow |
 | `--strict` | `-s` | Treat warnings as errors |
-| `--format` | `-f` | Output format: text, json, github |
+| `--format` | `-f` | Output format: text, json, github, junit |
 | `--config` | `-c` | Path to config file |
 | `--version` | `-v` | Print version and exit |
 | `--list-rules` | `-l` | List all known OLM annotations and exit |

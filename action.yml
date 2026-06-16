@@ -21,6 +21,15 @@ inputs:
     description: "Output format: text, json, github"
     required: false
     default: "github"
+outputs:
+  error-count:
+    description: "Number of error-severity violations found"
+  warning-count:
+    description: "Number of warning-severity violations found"
+  total-count:
+    description: "Total number of violations found"
+  has-errors:
+    description: "Whether errors were found (true/false)"
 runs:
   using: docker
   image: docker://quay.io/bapalm/olm-annotation-lint:v1

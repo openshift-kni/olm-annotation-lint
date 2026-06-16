@@ -31,6 +31,37 @@
 | `olm.targetNamespaces` | OperatorGroup |
 | `olm.providedAPIs` | OperatorGroup |
 
+## Bundle Annotations (OLM v1)
+
+These annotations appear in `metadata/annotations.yaml` files inside operator bundles. The linter auto-detects bundle files by their content — no special flags needed.
+
+| Annotation | Format |
+|---|---|
+| `operators.operatorframework.io.bundle.mediatype.v1` | bundle mediatype (`registry+v1`, `plain+v0`, `helm+v0`) |
+| `operators.operatorframework.io.bundle.manifests.v1` | string (directory path) |
+| `operators.operatorframework.io.bundle.metadata.v1` | string (directory path) |
+| `operators.operatorframework.io.bundle.package.v1` | string |
+| `operators.operatorframework.io.bundle.channels.v1` | comma-separated list |
+| `operators.operatorframework.io.bundle.channel.default.v1` | string |
+| `operators.operatorframework.io.metrics.builder` | string |
+| `operators.operatorframework.io.metrics.mediatype.v1` | string |
+| `operators.operatorframework.io.metrics.project_layout` | string |
+| `operators.operatorframework.io.test.config.v1` | string |
+| `operators.operatorframework.io.test.mediatype.v1` | string |
+
+## OLM v1 Controller-Managed Annotations
+
+These annotations are set by the OLM v1 operator-controller on `ClusterObjectSet` resources and should not be set by users.
+
+| Annotation | Resource |
+|---|---|
+| `olm.operatorframework.io/bundle-name` | ClusterObjectSet |
+| `olm.operatorframework.io/bundle-version` | ClusterObjectSet |
+| `olm.operatorframework.io/bundle-release` | ClusterObjectSet |
+| `olm.operatorframework.io/bundle-reference` | ClusterObjectSet |
+| `olm.operatorframework.io/service-account-name` | ClusterObjectSet |
+| `olm.operatorframework.io/service-account-namespace` | ClusterObjectSet |
+
 ## Console Annotations
 
 | Annotation | Resource | Format |

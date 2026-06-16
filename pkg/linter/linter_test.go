@@ -653,6 +653,138 @@ func TestLintDataMalformedYAML(t *testing.T) {
 	}
 }
 
+func TestBundleAnnotationsValid(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/valid/bundle_annotations.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		for _, v := range violations {
+			t.Errorf("unexpected violation: %s: %s", v.Annotation, v.Message)
+		}
+	}
+}
+
+func TestBundleAnnotationsWithMetrics(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/valid/bundle_annotations_with_metrics.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		for _, v := range violations {
+			t.Errorf("unexpected violation: %s: %s", v.Annotation, v.Message)
+		}
+	}
+}
+
+func TestClusterExtensionNoAnnotations(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/valid/clusterextension.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		for _, v := range violations {
+			t.Errorf("unexpected violation: %s: %s", v.Annotation, v.Message)
+		}
+	}
+}
+
+func TestBundleAnnotationsBadMediatype(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/bundle_bad_mediatype.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := findViolation(violations, "operators.operatorframework.io.bundle.mediatype.v1", "invalid bundle mediatype")
+	if !found {
+		t.Error("expected violation for invalid bundle mediatype")
+	}
+}
+
+func TestBundleAnnotationsUnknown(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/bundle_unknown_annotation.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := findViolation(violations, "operators.operatorframework.io.bundle.nonexistent.v1", "unknown OLM annotation")
+	if !found {
+		t.Error("expected violation for unknown bundle annotation")
+	}
+}
+
+func TestBundleAnnotationsCaseMismatch(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/bundle_case_mismatch.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := findViolation(violations, "operators.operatorframework.io.bundle.MediaType.v1", "wrong casing")
+	if !found {
+		t.Error("expected violation for bundle annotation case mismatch")
+	}
+}
+
+func TestBundleAnnotationsSkipNonBundle(t *testing.T) {
+	data := []byte(`some_key: some_value
+another_key: another_value
+`)
+	violations, err := linter.LintData(data, "<test>", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		t.Errorf("expected non-bundle YAML without apiVersion/Kind to be silently skipped, got %d violations", len(violations))
+	}
+}
+
+func TestBundleAnnotationsLintData(t *testing.T) {
+	data := []byte(`annotations:
+  operators.operatorframework.io.bundle.mediatype.v1: registry+v1
+  operators.operatorframework.io.bundle.package.v1: my-operator
+  operators.operatorframework.io.bundle.channels.v1: alpha
+  operators.operatorframework.io.bundle.channel.default.v1: alpha
+`)
+	violations, err := linter.LintData(data, "<test>", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(violations) > 0 {
+		for _, v := range violations {
+			t.Errorf("unexpected violation: %s: %s", v.Annotation, v.Message)
+		}
+	}
+}
+
+func TestBundleAnnotationsLintDataBadMediatype(t *testing.T) {
+	data := []byte(`annotations:
+  operators.operatorframework.io.bundle.mediatype.v1: bad-value
+  operators.operatorframework.io.bundle.package.v1: my-operator
+  operators.operatorframework.io.bundle.channels.v1: alpha
+  operators.operatorframework.io.bundle.channel.default.v1: alpha
+`)
+	violations, err := linter.LintData(data, "<test>", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := findViolation(violations, "operators.operatorframework.io.bundle.mediatype.v1", "invalid bundle mediatype")
+	if !found {
+		t.Error("expected violation for bad bundle mediatype in LintData")
+	}
+}
+
 func findViolation(violations []linter.Violation, annotation, messageContains string) bool {
 	for _, v := range violations {
 		if v.Annotation == annotation {

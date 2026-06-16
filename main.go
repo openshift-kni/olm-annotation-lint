@@ -182,7 +182,13 @@ func main() {
 		}
 	}
 
-	if reporter.HasErrors(violations, strict) {
+	hasErrors := reporter.HasErrors(violations, strict)
+
+	if ghOutput := os.Getenv("GITHUB_OUTPUT"); ghOutput != "" {
+		writeGitHubOutputs(ghOutput, errorCount, warningCount, len(violations), hasErrors)
+	}
+
+	if hasErrors {
 		_, _ = fmt.Fprintf(os.Stderr, "\nFound %d error(s) and %d warning(s)\n", errorCount, warningCount)
 		os.Exit(1)
 	}
@@ -190,4 +196,18 @@ func main() {
 	if warningCount > 0 {
 		_, _ = fmt.Fprintf(os.Stderr, "\nFound %d warning(s)\n", warningCount)
 	}
+}
+
+func writeGitHubOutputs(path string, errors, warnings, total int, hasErrors bool) {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644) //nolint:gosec // GITHUB_OUTPUT path is set by the Actions runner
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Warning: cannot write GitHub outputs: %v\n", err)
+		return
+	}
+	defer func() { _ = f.Close() }()
+
+	_, _ = fmt.Fprintf(f, "error-count=%d\n", errors)
+	_, _ = fmt.Fprintf(f, "warning-count=%d\n", warnings)
+	_, _ = fmt.Fprintf(f, "total-count=%d\n", total)
+	_, _ = fmt.Fprintf(f, "has-errors=%t\n", hasErrors)
 }

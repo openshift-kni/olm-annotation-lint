@@ -341,3 +341,74 @@ func TestMainInvalidConfig(t *testing.T) {
 		t.Errorf("expected exit code 2 for invalid config, got %d", exitErr.ExitCode())
 	}
 }
+
+func TestGitHubOutputs(t *testing.T) {
+	bin := testBinary
+
+	tests := []struct {
+		name        string
+		args        []string
+		wantErrors  string
+		wantHasErrs string
+	}{
+		{
+			name:        "valid files produce zero counts",
+			args:        []string{"--path", "testdata/valid"},
+			wantErrors:  "error-count=0",
+			wantHasErrs: "has-errors=false",
+		},
+		{
+			name:        "invalid files produce error counts",
+			args:        []string{"--path", "testdata/invalid/unknown_olm_annotation.yaml"},
+			wantErrors:  "error-count=1",
+			wantHasErrs: "has-errors=true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpFile, err := os.CreateTemp(t.TempDir(), "github-output-*")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = tmpFile.Close()
+
+			cmd := exec.Command(bin, tt.args...) //nolint:gosec // test runs locally built binary
+			cmd.Env = append(os.Environ(), "GITHUB_OUTPUT="+tmpFile.Name())
+			_ = cmd.Run()
+
+			data, err := os.ReadFile(tmpFile.Name())
+			if err != nil {
+				t.Fatalf("failed to read GITHUB_OUTPUT file: %v", err)
+			}
+			output := string(data)
+
+			if !strings.Contains(output, tt.wantErrors) {
+				t.Errorf("expected %q in output, got:\n%s", tt.wantErrors, output)
+			}
+			if !strings.Contains(output, tt.wantHasErrs) {
+				t.Errorf("expected %q in output, got:\n%s", tt.wantHasErrs, output)
+			}
+			if !strings.Contains(output, "warning-count=") {
+				t.Errorf("expected warning-count in output, got:\n%s", output)
+			}
+			if !strings.Contains(output, "total-count=") {
+				t.Errorf("expected total-count in output, got:\n%s", output)
+			}
+		})
+	}
+}
+
+func TestGitHubOutputsNotWrittenWithoutEnv(t *testing.T) {
+	bin := testBinary
+
+	cmd := exec.Command(bin, "--path", "testdata/valid") //nolint:gosec // test runs locally built binary
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME")}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("unexpected error: %v\n%s", err, out)
+	}
+	if strings.Contains(string(out), "error-count=") {
+		t.Error("expected no GitHub output lines in stdout/stderr when GITHUB_OUTPUT is not set")
+	}
+}

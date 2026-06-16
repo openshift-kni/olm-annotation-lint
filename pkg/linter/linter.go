@@ -32,6 +32,10 @@ type metadata struct {
 	Annotations map[string]string `yaml:"annotations"`
 }
 
+type bundleAnnotationsFile struct {
+	Annotations map[string]string `yaml:"annotations"`
+}
+
 type Options struct {
 	Paths              []string
 	Exclude            []string
@@ -163,6 +167,10 @@ func LintData(data []byte, source string, allowedAnnotations []string) ([]Violat
 		}
 
 		if resource.APIVersion == "" || resource.Kind == "" {
+			bundleViolations := lintBundleAnnotations(&node, source, allowSet)
+			if bundleViolations != nil {
+				violations = append(violations, bundleViolations...)
+			}
 			continue
 		}
 
@@ -244,23 +252,33 @@ func validateAnnotation(file string, line int, key, value, kind string, allowedA
 			violations = append(violations, newViolation(rules.SeverityError,
 				fmt.Sprintf("invalid semver range %q, expected format like >=1.0.0 <2.0.0", value)))
 		}
+	case rules.FormatBundleMediatype:
+		if !rules.ValidateBundleMediatype(value) {
+			violations = append(violations, newViolation(rules.SeverityError,
+				fmt.Sprintf("invalid bundle mediatype %q, expected one of: registry+v1, plain+v0, helm+v0", value)))
+		}
+	case rules.FormatCommaSeparated:
+		if !rules.ValidateCommaSeparated(value) {
+			violations = append(violations, newViolation(rules.SeverityError,
+				fmt.Sprintf("invalid comma-separated list %q, expected non-empty comma-separated values", value)))
+		}
 	}
 
 	return violations
 }
 
 func extractAnnotationLines(root *yaml.Node) map[string]int {
-	lines := map[string]int{}
 	metadataNode := findMappingValue(root, "metadata")
-	if metadataNode == nil {
+	return annotationLinesFromNode(findMappingValue(metadataNode, "annotations"))
+}
+
+func annotationLinesFromNode(node *yaml.Node) map[string]int {
+	lines := map[string]int{}
+	if node == nil || node.Kind != yaml.MappingNode {
 		return lines
 	}
-	annotationsNode := findMappingValue(metadataNode, "annotations")
-	if annotationsNode == nil || annotationsNode.Kind != yaml.MappingNode {
-		return lines
-	}
-	for i := 0; i+1 < len(annotationsNode.Content); i += 2 {
-		lines[annotationsNode.Content[i].Value] = annotationsNode.Content[i].Line
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		lines[node.Content[i].Value] = node.Content[i].Line
 	}
 	return lines
 }
@@ -281,4 +299,38 @@ func findMappingValue(node *yaml.Node, key string) *yaml.Node {
 		}
 	}
 	return nil
+}
+
+const bundleAnnotationPrefix = "operators.operatorframework.io.bundle."
+
+func lintBundleAnnotations(node *yaml.Node, source string, allowSet map[string]bool) []Violation {
+	var bundle bundleAnnotationsFile
+	if err := node.Decode(&bundle); err != nil || len(bundle.Annotations) == 0 {
+		return nil
+	}
+
+	hasBundleKey := false
+	for key := range bundle.Annotations {
+		if strings.HasPrefix(key, bundleAnnotationPrefix) {
+			hasBundleKey = true
+			break
+		}
+	}
+	if !hasBundleKey {
+		return nil
+	}
+
+	annotationLines := annotationLinesFromNode(findMappingValue(node, "annotations"))
+	var violations []Violation
+
+	for key, value := range bundle.Annotations {
+		if !rules.IsOLMAnnotation(key) {
+			continue
+		}
+		line := annotationLines[key]
+		v := validateAnnotation(source, line, key, value, rules.KindBundleAnnotations, allowSet)
+		violations = append(violations, v...)
+	}
+
+	return violations
 }

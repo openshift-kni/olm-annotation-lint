@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 )
+
+const KindBundleAnnotations = "BundleAnnotations"
 
 type Severity int
 
@@ -36,6 +39,8 @@ const (
 	FormatJSON
 	FormatTemplate
 	FormatSemverRange
+	FormatBundleMediatype
+	FormatCommaSeparated
 )
 
 type AnnotationRule struct {
@@ -133,11 +138,122 @@ var controllerManaged = []AnnotationRule{
 		ResourceKinds: []string{"OperatorGroup"},
 		Description:   "APIs provided by operators in the group",
 	},
+	{
+		Key:           "olm.operatorframework.io/bundle-name",
+		ResourceKinds: []string{"ClusterObjectSet"},
+		Description:   "Bundle name set by operator-controller",
+	},
+	{
+		Key:           "olm.operatorframework.io/bundle-version",
+		ResourceKinds: []string{"ClusterObjectSet"},
+		Description:   "Bundle version set by operator-controller",
+	},
+	{
+		Key:           "olm.operatorframework.io/bundle-release",
+		ResourceKinds: []string{"ClusterObjectSet"},
+		Description:   "Bundle release set by operator-controller",
+	},
+	{
+		Key:           "olm.operatorframework.io/bundle-reference",
+		ResourceKinds: []string{"ClusterObjectSet"},
+		Description:   "Image or catalog reference set by operator-controller",
+	},
+	{
+		Key:           "olm.operatorframework.io/service-account-name",
+		ResourceKinds: []string{"ClusterObjectSet"},
+		Description:   "ServiceAccount name set by operator-controller",
+	},
+	{
+		Key:           "olm.operatorframework.io/service-account-namespace",
+		ResourceKinds: []string{"ClusterObjectSet"},
+		Description:   "ServiceAccount namespace set by operator-controller",
+	},
+}
+
+var bundleAnnotations = []AnnotationRule{
+	{
+		Key:           "operators.operatorframework.io.bundle.mediatype.v1",
+		ResourceKinds: []string{KindBundleAnnotations},
+		UserSettable:  true,
+		Format:        FormatBundleMediatype,
+		Description:   "Bundle format type",
+	},
+	{
+		Key:           "operators.operatorframework.io.bundle.manifests.v1",
+		ResourceKinds: []string{KindBundleAnnotations},
+		UserSettable:  true,
+		Format:        FormatString,
+		Description:   "Path to manifests directory in the bundle image",
+	},
+	{
+		Key:           "operators.operatorframework.io.bundle.metadata.v1",
+		ResourceKinds: []string{KindBundleAnnotations},
+		UserSettable:  true,
+		Format:        FormatString,
+		Description:   "Path to metadata directory in the bundle image",
+	},
+	{
+		Key:           "operators.operatorframework.io.bundle.package.v1",
+		ResourceKinds: []string{KindBundleAnnotations},
+		UserSettable:  true,
+		Format:        FormatString,
+		Description:   "Operator package name",
+	},
+	{
+		Key:           "operators.operatorframework.io.bundle.channels.v1",
+		ResourceKinds: []string{KindBundleAnnotations},
+		UserSettable:  true,
+		Format:        FormatCommaSeparated,
+		Description:   "Comma-separated list of channels this bundle belongs to",
+	},
+	{
+		Key:           "operators.operatorframework.io.bundle.channel.default.v1",
+		ResourceKinds: []string{KindBundleAnnotations},
+		UserSettable:  true,
+		Format:        FormatString,
+		Description:   "Default channel for the operator",
+	},
+	{
+		Key:           "operators.operatorframework.io.metrics.builder",
+		ResourceKinds: []string{KindBundleAnnotations},
+		UserSettable:  true,
+		Format:        FormatString,
+		Description:   "Builder tool and version used to create the bundle",
+	},
+	{
+		Key:           "operators.operatorframework.io.metrics.mediatype.v1",
+		ResourceKinds: []string{KindBundleAnnotations},
+		UserSettable:  true,
+		Format:        FormatString,
+		Description:   "Metrics format type",
+	},
+	{
+		Key:           "operators.operatorframework.io.metrics.project_layout",
+		ResourceKinds: []string{KindBundleAnnotations},
+		UserSettable:  true,
+		Format:        FormatString,
+		Description:   "Project layout type",
+	},
+	{
+		Key:           "operators.operatorframework.io.test.config.v1",
+		ResourceKinds: []string{KindBundleAnnotations},
+		UserSettable:  true,
+		Format:        FormatString,
+		Description:   "Path to test configuration directory",
+	},
+	{
+		Key:           "operators.operatorframework.io.test.mediatype.v1",
+		ResourceKinds: []string{KindBundleAnnotations},
+		UserSettable:  true,
+		Format:        FormatString,
+		Description:   "Test format type",
+	},
 }
 
 var olmPrefixes = []string{
 	"olm.",
 	"operatorframework.io/",
+	"operators.operatorframework.io.",
 }
 
 func IsOLMAnnotation(key string) bool {
@@ -161,6 +277,11 @@ func findRuleWith(key string, match func(a, b string) bool) (AnnotationRule, boo
 			return r, true
 		}
 	}
+	for _, r := range bundleAnnotations {
+		if match(r.Key, key) {
+			return r, true
+		}
+	}
 	return AnnotationRule{}, false
 }
 
@@ -173,12 +294,7 @@ func FindRuleCaseInsensitive(key string) (AnnotationRule, bool) {
 }
 
 func IsValidResourceKind(rule AnnotationRule, kind string) bool {
-	for _, k := range rule.ResourceKinds {
-		if k == kind {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(rule.ResourceKinds, kind)
 }
 
 func ValidateDuration(value string) bool {
@@ -244,6 +360,24 @@ func isVersion(s string) bool {
 	return true
 }
 
+var validBundleMediatypes = []string{"registry+v1", "plain+v0", "helm+v0"}
+
+func ValidateBundleMediatype(value string) bool {
+	return slices.Contains(validBundleMediatypes, value)
+}
+
+func ValidateCommaSeparated(value string) bool {
+	if strings.TrimSpace(value) == "" {
+		return false
+	}
+	for _, item := range strings.Split(value, ",") {
+		if strings.TrimSpace(item) == "" {
+			return false
+		}
+	}
+	return true
+}
+
 func formatName(f ValueFormat) string {
 	switch f {
 	case FormatDuration:
@@ -254,6 +388,10 @@ func formatName(f ValueFormat) string {
 		return "template"
 	case FormatSemverRange:
 		return "semver range"
+	case FormatBundleMediatype:
+		return "bundle mediatype"
+	case FormatCommaSeparated:
+		return "comma-separated list"
 	default:
 		return "string"
 	}
@@ -268,5 +406,10 @@ func PrintRules(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "Controller-managed annotations (should not be set by users):")
 	for _, r := range controllerManaged {
 		_, _ = fmt.Fprintf(w, "  %-65s %s\n", r.Key, strings.Join(r.ResourceKinds, ", "))
+	}
+	_, _ = fmt.Fprintln(w, "")
+	_, _ = fmt.Fprintln(w, "Bundle annotations (in metadata/annotations.yaml):")
+	for _, r := range bundleAnnotations {
+		_, _ = fmt.Fprintf(w, "  %-65s (%s)\n", r.Key, formatName(r.Format))
 	}
 }

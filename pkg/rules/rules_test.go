@@ -20,6 +20,11 @@ func TestIsOLMAnnotation(t *testing.T) {
 		{"operatorframework.io/bundle-unpack-timeout", true},
 		{"operatorframework.io/bundle-unpack-min-retry-interval", true},
 		{"OLM.providedAPIs", true},
+		{"operators.operatorframework.io.bundle.mediatype.v1", true},
+		{"operators.operatorframework.io.bundle.channels.v1", true},
+		{"operators.operatorframework.io.metrics.builder", true},
+		{"operators.operatorframework.io.test.config.v1", true},
+		{"Operators.Operatorframework.IO.Bundle.Mediatype.V1", true},
 		{"argocd.argoproj.io/sync-wave", false},
 		{"ran.openshift.io/ztp-deploy-wave", false},
 		{"kubectl.kubernetes.io/last-applied-configuration", false},
@@ -45,8 +50,15 @@ func TestFindRule(t *testing.T) {
 		{"operatorframework.io/bundle-unpack-min-retry-interval", true},
 		{"olm.skipRange", true},
 		{"olm.providedAPIs", true},
+		{"operators.operatorframework.io.bundle.mediatype.v1", true},
+		{"operators.operatorframework.io.bundle.channels.v1", true},
+		{"operators.operatorframework.io.metrics.builder", true},
+		{"operators.operatorframework.io.test.config.v1", true},
+		{"olm.operatorframework.io/bundle-name", true},
+		{"olm.operatorframework.io/bundle-version", true},
 		{"olm.operatorframework.io/bundle-install-timeout", false},
 		{"operatorframework.io/made-up", false},
+		{"operators.operatorframework.io.bundle.nonexistent.v1", false},
 	}
 
 	for _, tt := range tests {
@@ -221,6 +233,108 @@ func TestSeverityString(t *testing.T) {
 	}
 }
 
+func TestValidateBundleMediatype(t *testing.T) {
+	tests := []struct {
+		value string
+		valid bool
+	}{
+		{"registry+v1", true},
+		{"plain+v0", true},
+		{"helm+v0", true},
+		{"invalid-format", false},
+		{"registry+v2", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.value, func(t *testing.T) {
+			got := rules.ValidateBundleMediatype(tt.value)
+			if got != tt.valid {
+				t.Errorf("ValidateBundleMediatype(%q) = %v, want %v", tt.value, got, tt.valid)
+			}
+		})
+	}
+}
+
+func TestValidateCommaSeparated(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{"single value", "alpha", true},
+		{"multiple values", "alpha,beta,stable", true},
+		{"with spaces", "alpha, beta", true},
+		{"empty", "", false},
+		{"only spaces", "   ", false},
+		{"trailing comma", "alpha,", false},
+		{"leading comma", ",alpha", false},
+		{"consecutive commas", "alpha,,beta", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := rules.ValidateCommaSeparated(tt.value)
+			if got != tt.valid {
+				t.Errorf("ValidateCommaSeparated(%q) = %v, want %v", tt.value, got, tt.valid)
+			}
+		})
+	}
+}
+
+func TestFindRuleBundleAnnotations(t *testing.T) {
+	tests := []struct {
+		key  string
+		kind string
+	}{
+		{"operators.operatorframework.io.bundle.mediatype.v1", "BundleAnnotations"},
+		{"operators.operatorframework.io.bundle.channels.v1", "BundleAnnotations"},
+		{"operators.operatorframework.io.metrics.builder", "BundleAnnotations"},
+		{"operators.operatorframework.io.test.config.v1", "BundleAnnotations"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			rule, found := rules.FindRule(tt.key)
+			if !found {
+				t.Fatalf("FindRule(%q) not found", tt.key)
+			}
+			if !rule.UserSettable {
+				t.Errorf("expected %q to be user-settable", tt.key)
+			}
+			if !rules.IsValidResourceKind(rule, tt.kind) {
+				t.Errorf("expected %q to be valid on %s", tt.key, tt.kind)
+			}
+		})
+	}
+}
+
+func TestFindRuleV1ControllerManaged(t *testing.T) {
+	tests := []struct {
+		key  string
+		kind string
+	}{
+		{"olm.operatorframework.io/bundle-name", "ClusterObjectSet"},
+		{"olm.operatorframework.io/bundle-version", "ClusterObjectSet"},
+		{"olm.operatorframework.io/service-account-name", "ClusterObjectSet"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			rule, found := rules.FindRule(tt.key)
+			if !found {
+				t.Fatalf("FindRule(%q) not found", tt.key)
+			}
+			if rule.UserSettable {
+				t.Errorf("expected %q to be controller-managed", tt.key)
+			}
+			if !rules.IsValidResourceKind(rule, tt.kind) {
+				t.Errorf("expected %q to be valid on %s", tt.key, tt.kind)
+			}
+		})
+	}
+}
+
 func TestPrintRules(t *testing.T) {
 	var buf bytes.Buffer
 	rules.PrintRules(&buf)
@@ -232,13 +346,25 @@ func TestPrintRules(t *testing.T) {
 	if !strings.Contains(output, "Controller-managed annotations") {
 		t.Error("expected controller-managed header in output")
 	}
+	if !strings.Contains(output, "Bundle annotations") {
+		t.Error("expected bundle annotations header in output")
+	}
 	if !strings.Contains(output, "operatorframework.io/bundle-unpack-timeout") {
 		t.Error("expected bundle-unpack-timeout in output")
 	}
 	if !strings.Contains(output, "olm.operatorGroup") {
 		t.Error("expected olm.operatorGroup in output")
 	}
+	if !strings.Contains(output, "operators.operatorframework.io.bundle.mediatype.v1") {
+		t.Error("expected bundle mediatype in output")
+	}
+	if !strings.Contains(output, "olm.operatorframework.io/bundle-name") {
+		t.Error("expected v1 controller-managed annotation in output")
+	}
 	if !strings.Contains(output, "(duration)") {
 		t.Error("expected format type in output")
+	}
+	if !strings.Contains(output, "(bundle mediatype)") {
+		t.Error("expected bundle mediatype format in output")
 	}
 }

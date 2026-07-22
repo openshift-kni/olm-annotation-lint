@@ -19,6 +19,7 @@ const (
 	FormatJSON
 	FormatGitHub
 	FormatJUnit
+	FormatSARIF
 )
 
 var formatNames = map[string]Format{
@@ -26,6 +27,7 @@ var formatNames = map[string]Format{
 	"json":   FormatJSON,
 	"github": FormatGitHub,
 	"junit":  FormatJUnit,
+	"sarif":  FormatSARIF,
 }
 
 func ParseFormat(s string) (Format, error) {
@@ -48,6 +50,8 @@ func Report(w io.Writer, violations []linter.Violation, format Format, version s
 		reportGitHub(w, violations)
 	case FormatJUnit:
 		reportJUnit(w, violations)
+	case FormatSARIF:
+		reportSARIF(w, violations, version)
 	default:
 		reportText(w, violations)
 	}

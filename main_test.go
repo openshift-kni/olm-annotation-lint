@@ -129,6 +129,22 @@ func TestLoadConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("config with format", func(t *testing.T) {
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "config.yaml")
+		content := "path: testdata/valid\nformat: junit\n"
+		if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := loadConfig(cfgPath)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.Format != "junit" {
+			t.Errorf("expected format junit, got %q", cfg.Format)
+		}
+	})
+
 	t.Run("invalid YAML", func(t *testing.T) {
 		dir := t.TempDir()
 		cfgPath := filepath.Join(dir, "config.yaml")
@@ -340,6 +356,84 @@ func TestMainConfigFlagOverride(t *testing.T) {
 	cmd := exec.Command(bin, "--config", cfgPath, "--path", "testdata/valid") //nolint:gosec // test runs locally built binary
 	if err := cmd.Run(); err != nil {
 		t.Errorf("CLI --path should override config path, got: %v", err)
+	}
+}
+
+func TestMainConfigFormat(t *testing.T) {
+	bin := testBinary
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "test-config.yaml")
+	content := "path: testdata/invalid/unknown_olm_annotation.yaml\nformat: json\n"
+	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _ := exec.Command(bin, "--config", cfgPath).CombinedOutput() //nolint:gosec // test runs locally built binary
+	if !strings.Contains(string(out), `"severity"`) {
+		t.Errorf("expected JSON output from config format, got: %s", out)
+	}
+}
+
+func TestMainConfigFormatCLIOverride(t *testing.T) {
+	bin := testBinary
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "test-config.yaml")
+	content := "path: testdata/invalid/unknown_olm_annotation.yaml\nformat: json\n"
+	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _ := exec.Command(bin, "--config", cfgPath, "--format", "text").CombinedOutput() //nolint:gosec // test runs locally built binary
+	if !strings.Contains(string(out), "[ERROR]") {
+		t.Errorf("expected text output when CLI overrides config, got: %s", out)
+	}
+	if strings.Contains(string(out), `"severity"`) {
+		t.Errorf("expected CLI --format to override config format")
+	}
+}
+
+func TestMainConfigFormatShortFlagOverride(t *testing.T) {
+	bin := testBinary
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "test-config.yaml")
+	content := "path: testdata/invalid/unknown_olm_annotation.yaml\nformat: json\n"
+	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _ := exec.Command(bin, "--config", cfgPath, "-f", "text").CombinedOutput() //nolint:gosec // test runs locally built binary
+	if !strings.Contains(string(out), "[ERROR]") {
+		t.Errorf("expected text output when -f overrides config, got: %s", out)
+	}
+	if strings.Contains(string(out), `"severity"`) {
+		t.Errorf("expected -f flag to override config format")
+	}
+}
+
+func TestMainConfigFormatInvalid(t *testing.T) {
+	bin := testBinary
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "test-config.yaml")
+	content := "path: testdata/valid\nformat: xml\n"
+	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, "--config", cfgPath) //nolint:gosec // test runs locally built binary
+	out, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitError for invalid config format, got: %v", err)
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Errorf("expected exit code 2, got %d", exitErr.ExitCode())
+	}
+	if !strings.Contains(string(out), `unknown format "xml"`) {
+		t.Errorf("expected unknown format error, got: %s", out)
 	}
 }
 

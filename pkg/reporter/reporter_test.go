@@ -19,6 +19,7 @@ var testViolations = []linter.Violation{
 		Annotation: "olm.fake",
 		Kind:       "OperatorGroup",
 		Severity:   rules.SeverityError,
+		Rule:       rules.RuleUnknownAnnotation,
 		Message:    "unknown OLM annotation",
 	},
 	{
@@ -27,6 +28,7 @@ var testViolations = []linter.Violation{
 		Annotation: "olm.operatorGroup",
 		Kind:       "ClusterServiceVersion",
 		Severity:   rules.SeverityWarning,
+		Rule:       rules.RuleControllerManaged,
 		Message:    "controller-managed annotation",
 	},
 }
@@ -77,6 +79,12 @@ func TestReportJSON(t *testing.T) {
 	}
 	if len(result.Violations) != 2 {
 		t.Errorf("expected 2 violations in JSON, got %d", len(result.Violations))
+	}
+	if rule, ok := result.Violations[0]["rule"].(string); !ok || rule != rules.RuleUnknownAnnotation {
+		t.Errorf("expected rule 'unknown-annotation' in first violation, got %v", result.Violations[0]["rule"])
+	}
+	if rule, ok := result.Violations[1]["rule"].(string); !ok || rule != rules.RuleControllerManaged {
+		t.Errorf("expected rule 'controller-managed' in second violation, got %v", result.Violations[1]["rule"])
 	}
 }
 
@@ -266,8 +274,8 @@ func TestReportJUnit(t *testing.T) {
 	if suite.Cases[0].Failure == nil {
 		t.Error("expected failure element on error violation")
 	}
-	if suite.Cases[0].Failure.Type != "error" {
-		t.Errorf("expected failure type 'error', got %s", suite.Cases[0].Failure.Type)
+	if suite.Cases[0].Failure.Type != rules.RuleUnknownAnnotation {
+		t.Errorf("expected failure type %q, got %s", rules.RuleUnknownAnnotation, suite.Cases[0].Failure.Type)
 	}
 }
 

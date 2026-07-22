@@ -19,6 +19,7 @@ type Violation struct {
 	Annotation string
 	Kind       string
 	Severity   rules.Severity
+	Rule       string
 	Message    string
 }
 
@@ -194,10 +195,10 @@ func LintData(data []byte, source string, allowedAnnotations []string) ([]Violat
 func validateAnnotation(file string, line int, key, value, kind string, allowedAnnotations map[string]bool) []Violation {
 	var violations []Violation
 
-	newViolation := func(sev rules.Severity, msg string) Violation {
+	newViolation := func(sev rules.Severity, ruleID, msg string) Violation {
 		return Violation{
 			File: file, Line: line, Annotation: key, Kind: kind,
-			Severity: sev, Message: msg,
+			Severity: sev, Rule: ruleID, Message: msg,
 		}
 	}
 
@@ -205,61 +206,61 @@ func validateAnnotation(file string, line int, key, value, kind string, allowedA
 	if !found {
 		caseRule, caseFound := rules.FindRuleCaseInsensitive(key)
 		if caseFound {
-			violations = append(violations, newViolation(rules.SeverityError,
+			violations = append(violations, newViolation(rules.SeverityError, rules.RuleCaseMismatch,
 				fmt.Sprintf("annotation has wrong casing, use %q", caseRule.Key)))
 			return violations
 		}
 
 		if allowedAnnotations[key] {
-			violations = append(violations, newViolation(rules.SeverityInfo,
+			violations = append(violations, newViolation(rules.SeverityInfo, rules.RuleAllowedOverride,
 				fmt.Sprintf("annotation %q allowed via user override", key)))
 			return violations
 		}
 
-		violations = append(violations, newViolation(rules.SeverityError,
+		violations = append(violations, newViolation(rules.SeverityError, rules.RuleUnknownAnnotation,
 			fmt.Sprintf("unknown OLM annotation (use --allow %s to bypass this error)", key)))
 		return violations
 	}
 
 	if !rule.UserSettable {
-		violations = append(violations, newViolation(rules.SeverityWarning,
+		violations = append(violations, newViolation(rules.SeverityWarning, rules.RuleControllerManaged,
 			"annotation is controller-managed and should not be set by users"))
 	}
 
 	if !rules.IsValidResourceKind(rule, kind) {
-		violations = append(violations, newViolation(rules.SeverityError,
+		violations = append(violations, newViolation(rules.SeverityError, rules.RuleWrongResourceKind,
 			fmt.Sprintf("annotation is not valid on %s, expected one of: %s", kind, strings.Join(rule.ResourceKinds, ", "))))
 	}
 
 	switch rule.Format {
 	case rules.FormatDuration:
 		if !rules.ValidateDuration(value) {
-			violations = append(violations, newViolation(rules.SeverityError,
+			violations = append(violations, newViolation(rules.SeverityError, rules.RuleInvalidValue,
 				fmt.Sprintf("invalid duration value %q, expected format like 10m, 1h30m, 5s", value)))
 		}
 	case rules.FormatJSON:
 		if !rules.ValidateJSON(value) {
-			violations = append(violations, newViolation(rules.SeverityError,
+			violations = append(violations, newViolation(rules.SeverityError, rules.RuleInvalidValue,
 				fmt.Sprintf("invalid JSON value %q", value)))
 		}
 	case rules.FormatTemplate:
 		if !rules.ValidateTemplate(value) {
-			violations = append(violations, newViolation(rules.SeverityError,
+			violations = append(violations, newViolation(rules.SeverityError, rules.RuleInvalidValue,
 				fmt.Sprintf("invalid template value %q, unbalanced curly braces", value)))
 		}
 	case rules.FormatSemverRange:
 		if !rules.ValidateSemverRange(value) {
-			violations = append(violations, newViolation(rules.SeverityError,
+			violations = append(violations, newViolation(rules.SeverityError, rules.RuleInvalidValue,
 				fmt.Sprintf("invalid semver range %q, expected format like >=1.0.0 <2.0.0", value)))
 		}
 	case rules.FormatBundleMediatype:
 		if !rules.ValidateBundleMediatype(value) {
-			violations = append(violations, newViolation(rules.SeverityError,
+			violations = append(violations, newViolation(rules.SeverityError, rules.RuleInvalidValue,
 				fmt.Sprintf("invalid bundle mediatype %q, expected one of: registry+v1, plain+v0, helm+v0", value)))
 		}
 	case rules.FormatCommaSeparated:
 		if !rules.ValidateCommaSeparated(value) {
-			violations = append(violations, newViolation(rules.SeverityError,
+			violations = append(violations, newViolation(rules.SeverityError, rules.RuleInvalidValue,
 				fmt.Sprintf("invalid comma-separated list %q, expected non-empty comma-separated values", value)))
 		}
 	}

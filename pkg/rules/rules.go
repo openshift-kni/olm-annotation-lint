@@ -31,6 +31,15 @@ func (s Severity) String() string {
 	}
 }
 
+const (
+	RuleUnknownAnnotation = "unknown-annotation"
+	RuleCaseMismatch      = "case-mismatch"
+	RuleAllowedOverride   = "allowed-override"
+	RuleControllerManaged = "controller-managed"
+	RuleWrongResourceKind = "wrong-resource-kind"
+	RuleInvalidValue      = "invalid-value"
+)
+
 type ValueFormat int
 
 const (

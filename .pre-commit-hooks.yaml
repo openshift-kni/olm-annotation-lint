@@ -1,0 +1,6 @@
+- id: olm-annotation-lint
+  name: OLM annotation lint
+  entry: olm-annotation-lint
+  language: golang
+  types: [yaml]
+  pass_filenames: false

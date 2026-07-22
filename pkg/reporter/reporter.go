@@ -70,6 +70,7 @@ type jsonViolation struct {
 	Annotation string `json:"annotation"`
 	Kind       string `json:"kind"`
 	Severity   string `json:"severity"`
+	Rule       string `json:"rule"`
 	Message    string `json:"message"`
 }
 
@@ -95,6 +96,7 @@ func reportJSON(w io.Writer, violations []linter.Violation, ver string) {
 			Annotation: v.Annotation,
 			Kind:       v.Kind,
 			Severity:   v.Severity.String(),
+			Rule:       v.Rule,
 			Message:    v.Message,
 		})
 		switch v.Severity {
@@ -166,7 +168,7 @@ func reportJUnit(w io.Writer, violations []linter.Violation) {
 		if v.Severity == rules.SeverityError || v.Severity == rules.SeverityWarning {
 			tc.Failure = &junitFailure{
 				Message: v.Message,
-				Type:    v.Severity.String(),
+				Type:    v.Rule,
 			}
 			failures++
 		}

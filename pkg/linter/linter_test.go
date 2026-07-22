@@ -34,6 +34,9 @@ func TestUnknownAnnotation(t *testing.T) {
 	if !found {
 		t.Error("expected violation for unknown annotation olm.operatorframework.io/bundle-install-timeout")
 	}
+	if rule := findViolationRule(violations, "olm.operatorframework.io/bundle-install-timeout"); rule != rules.RuleUnknownAnnotation {
+		t.Errorf("expected rule 'unknown-annotation', got %q", rule)
+	}
 }
 
 func TestWrongResourceType(t *testing.T) {
@@ -48,6 +51,9 @@ func TestWrongResourceType(t *testing.T) {
 	if !found {
 		t.Error("expected violation for wrong resource type")
 	}
+	if rule := findViolationRule(violations, "operatorframework.io/bundle-unpack-timeout"); rule != rules.RuleWrongResourceKind {
+		t.Errorf("expected rule 'wrong-resource-kind', got %q", rule)
+	}
 }
 
 func TestBadDurationValue(t *testing.T) {
@@ -61,6 +67,9 @@ func TestBadDurationValue(t *testing.T) {
 	found := findViolation(violations, "operatorframework.io/bundle-unpack-timeout", "invalid duration value")
 	if !found {
 		t.Error("expected violation for bad duration value")
+	}
+	if rule := findViolationRule(violations, "operatorframework.io/bundle-unpack-timeout"); rule != rules.RuleInvalidValue {
+		t.Errorf("expected rule 'invalid-value', got %q", rule)
 	}
 }
 
@@ -132,6 +141,9 @@ func TestCaseMismatch(t *testing.T) {
 	if !found {
 		t.Error("expected violation for case mismatch")
 	}
+	if rule := findViolationRule(violations, "OLM.providedAPIs"); rule != rules.RuleCaseMismatch {
+		t.Errorf("expected rule 'case-mismatch', got %q", rule)
+	}
 }
 
 func TestControllerManagedAnnotation(t *testing.T) {
@@ -145,6 +157,9 @@ func TestControllerManagedAnnotation(t *testing.T) {
 	found := findViolation(violations, "olm.operatorGroup", "controller-managed")
 	if !found {
 		t.Error("expected warning for controller-managed annotation")
+	}
+	if rule := findViolationRule(violations, "olm.operatorGroup"); rule != rules.RuleControllerManaged {
+		t.Errorf("expected rule 'controller-managed', got %q", rule)
 	}
 }
 
@@ -177,6 +192,9 @@ func TestAllowedAnnotationOverride(t *testing.T) {
 			}
 			if v.Severity != rules.SeverityInfo {
 				t.Errorf("expected info severity for allowed annotation, got %s", v.Severity)
+			}
+			if v.Rule != rules.RuleAllowedOverride {
+				t.Errorf("expected rule 'allowed-override', got %q", v.Rule)
 			}
 			if !strings.Contains(v.Message, "allowed via user override") {
 				t.Errorf("expected override message, got %q", v.Message)
@@ -797,4 +815,13 @@ func findViolation(violations []linter.Violation, annotation, messageContains st
 		}
 	}
 	return false
+}
+
+func findViolationRule(violations []linter.Violation, annotation string) string {
+	for _, v := range violations {
+		if v.Annotation == annotation {
+			return v.Rule
+		}
+	}
+	return ""
 }

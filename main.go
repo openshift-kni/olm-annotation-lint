@@ -43,6 +43,7 @@ type config struct {
 	Exclude stringOrList `yaml:"exclude"`
 	Allow   stringOrList `yaml:"allow"`
 	Strict  *bool        `yaml:"strict"`
+	Format  string       `yaml:"format"`
 }
 
 func loadConfig(path string) (*config, error) {
@@ -145,6 +146,9 @@ func main() {
 		}
 		if !setFlags["strict"] && !setFlags["s"] && cfg.Strict != nil {
 			strict = *cfg.Strict
+		}
+		if !setFlags["format"] && !setFlags["f"] && cfg.Format != "" {
+			format = cfg.Format
 		}
 	}
 

@@ -295,6 +295,7 @@ func TestMainOutputFormats(t *testing.T) {
 		{"json format", "json", `"severity"`},
 		{"github format", "github", "::error file="},
 		{"junit format", "junit", "<testsuites"},
+		{"sarif format", "sarif", `"$schema"`},
 	}
 
 	for _, tt := range tests {
@@ -322,7 +323,7 @@ func TestMainUnknownFormat(t *testing.T) {
 	if !strings.Contains(string(out), `unknown format "xml"`) {
 		t.Errorf("expected unknown format error, got: %s", out)
 	}
-	if !strings.Contains(string(out), "github, json, junit, text") {
+	if !strings.Contains(string(out), "github, json, junit, sarif, text") {
 		t.Errorf("expected supported formats listed, got: %s", out)
 	}
 }

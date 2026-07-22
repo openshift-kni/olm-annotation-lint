@@ -370,6 +370,7 @@ func TestParseFormat(t *testing.T) {
 		{"json", reporter.FormatJSON, false},
 		{"github", reporter.FormatGitHub, false},
 		{"junit", reporter.FormatJUnit, false},
+		{"sarif", reporter.FormatSARIF, false},
 		{"xml", 0, true},
 		{"", 0, true},
 		{"TEXT", 0, true},
@@ -401,5 +402,194 @@ func TestHasErrors(t *testing.T) {
 	}
 	if !reporter.HasErrors(warningOnly, true) {
 		t.Error("expected HasErrors to return true with warnings in strict mode")
+	}
+}
+
+func TestReportSARIF(t *testing.T) {
+	var buf bytes.Buffer
+	reporter.Report(&buf, testViolations, reporter.FormatSARIF, "1.0.0")
+
+	var result struct {
+		Schema  string `json:"$schema"`
+		Version string `json:"version"`
+		Runs    []struct {
+			Tool struct {
+				Driver struct {
+					Name    string `json:"name"`
+					Version string `json:"version"`
+					Rules   []struct {
+						ID               string `json:"id"`
+						ShortDescription struct {
+							Text string `json:"text"`
+						} `json:"shortDescription"`
+					} `json:"rules"`
+				} `json:"driver"`
+			} `json:"tool"`
+			Results []struct {
+				RuleID  string `json:"ruleId"`
+				Level   string `json:"level"`
+				Message struct {
+					Text string `json:"text"`
+				} `json:"message"`
+				Locations []struct {
+					PhysicalLocation struct {
+						ArtifactLocation struct {
+							URI string `json:"uri"`
+						} `json:"artifactLocation"`
+						Region *struct {
+							StartLine int `json:"startLine"`
+						} `json:"region"`
+					} `json:"physicalLocation"`
+				} `json:"locations"`
+			} `json:"results"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("invalid SARIF JSON: %v", err)
+	}
+	if result.Version != "2.1.0" {
+		t.Errorf("expected SARIF version 2.1.0, got %s", result.Version)
+	}
+	if !strings.Contains(result.Schema, "sarif-schema-2.1.0") {
+		t.Errorf("expected SARIF schema URL, got %s", result.Schema)
+	}
+	if len(result.Runs) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(result.Runs))
+	}
+	run := result.Runs[0]
+	if run.Tool.Driver.Name != "olm-annotation-lint" {
+		t.Errorf("expected tool name olm-annotation-lint, got %s", run.Tool.Driver.Name)
+	}
+	if run.Tool.Driver.Version != "1.0.0" {
+		t.Errorf("expected tool version 1.0.0, got %s", run.Tool.Driver.Version)
+	}
+	if len(run.Tool.Driver.Rules) != 2 {
+		t.Fatalf("expected 2 rules, got %d", len(run.Tool.Driver.Rules))
+	}
+	if len(run.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(run.Results))
+	}
+	if run.Results[0].RuleID != rules.RuleUnknownAnnotation {
+		t.Errorf("expected ruleId %q, got %q", rules.RuleUnknownAnnotation, run.Results[0].RuleID)
+	}
+	if run.Results[0].Level != "error" {
+		t.Errorf("expected level error, got %s", run.Results[0].Level)
+	}
+	if run.Results[1].Level != "warning" {
+		t.Errorf("expected level warning, got %s", run.Results[1].Level)
+	}
+	if run.Results[0].Locations[0].PhysicalLocation.ArtifactLocation.URI != "test.yaml" {
+		t.Errorf("expected URI test.yaml, got %s", run.Results[0].Locations[0].PhysicalLocation.ArtifactLocation.URI)
+	}
+	if run.Results[0].Locations[0].PhysicalLocation.Region == nil || run.Results[0].Locations[0].PhysicalLocation.Region.StartLine != 5 {
+		t.Error("expected region with startLine 5")
+	}
+}
+
+func TestReportSARIFEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	reporter.Report(&buf, []linter.Violation{}, reporter.FormatSARIF, "1.0.0")
+
+	var result struct {
+		Runs []struct {
+			Results []interface{} `json:"results"`
+			Tool    struct {
+				Driver struct {
+					Rules []interface{} `json:"rules"`
+				} `json:"driver"`
+			} `json:"tool"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("invalid SARIF JSON for empty violations: %v", err)
+	}
+	if len(result.Runs[0].Results) != 0 {
+		t.Errorf("expected 0 results, got %d", len(result.Runs[0].Results))
+	}
+}
+
+func TestReportSARIFNoLine(t *testing.T) {
+	violations := []linter.Violation{
+		{
+			File:       "test.yaml",
+			Line:       0,
+			Annotation: "olm.fake",
+			Kind:       "OperatorGroup",
+			Severity:   rules.SeverityError,
+			Rule:       rules.RuleUnknownAnnotation,
+			Message:    "unknown OLM annotation",
+		},
+	}
+	var buf bytes.Buffer
+	reporter.Report(&buf, violations, reporter.FormatSARIF, "1.0.0")
+
+	output := buf.String()
+	if strings.Contains(output, "startLine") {
+		t.Error("expected no region/startLine for line 0 violations")
+	}
+}
+
+func TestReportSARIFDedupAndInfo(t *testing.T) {
+	violations := []linter.Violation{
+		{
+			File: "a.yaml", Line: 1, Annotation: "olm.fake1",
+			Kind: "OperatorGroup", Severity: rules.SeverityError,
+			Rule: rules.RuleUnknownAnnotation, Message: "unknown 1",
+		},
+		{
+			File: "b.yaml", Line: 2, Annotation: "olm.fake2",
+			Kind: "OperatorGroup", Severity: rules.SeverityError,
+			Rule: rules.RuleUnknownAnnotation, Message: "unknown 2",
+		},
+		{
+			File: "c.yaml", Line: 3, Annotation: "olm.custom",
+			Kind: "OperatorGroup", Severity: rules.SeverityInfo,
+			Rule: rules.RuleAllowedOverride, Message: "allowed",
+		},
+	}
+	var buf bytes.Buffer
+	reporter.Report(&buf, violations, reporter.FormatSARIF, "1.0.0")
+
+	var result struct {
+		Runs []struct {
+			Tool struct {
+				Driver struct {
+					InformationURI string `json:"informationUri"`
+					Rules          []struct {
+						ID            string `json:"id"`
+						DefaultConfig struct {
+							Level string `json:"level"`
+						} `json:"defaultConfiguration"`
+					} `json:"rules"`
+				} `json:"driver"`
+			} `json:"tool"`
+			Results []struct {
+				RuleIndex *int   `json:"ruleIndex"`
+				Level     string `json:"level"`
+			} `json:"results"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("invalid SARIF JSON: %v", err)
+	}
+	run := result.Runs[0]
+	if run.Tool.Driver.InformationURI != "https://github.com/openshift-kni/olm-annotation-lint" {
+		t.Errorf("expected informationUri, got %q", run.Tool.Driver.InformationURI)
+	}
+	if len(run.Tool.Driver.Rules) != 2 {
+		t.Fatalf("expected 2 deduplicated rules, got %d", len(run.Tool.Driver.Rules))
+	}
+	if run.Results[0].RuleIndex == nil || *run.Results[0].RuleIndex != 0 ||
+		run.Results[1].RuleIndex == nil || *run.Results[1].RuleIndex != 0 {
+		t.Error("expected both unknown-annotation results to have ruleIndex 0")
+	}
+	if run.Results[2].RuleIndex == nil || *run.Results[2].RuleIndex != 1 {
+		t.Error("expected allowed-override result to have ruleIndex 1")
+	}
+	if run.Results[2].Level != "note" {
+		t.Errorf("expected level 'note' for info severity, got %q", run.Results[2].Level)
+	}
+	if run.Tool.Driver.Rules[1].DefaultConfig.Level != "note" {
+		t.Errorf("expected rule default level 'note' for info rule, got %q", run.Tool.Driver.Rules[1].DefaultConfig.Level)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/openshift-kni/olm-annotation-lint/pkg/linter"
@@ -19,6 +20,25 @@ const (
 	FormatGitHub
 	FormatJUnit
 )
+
+var formatNames = map[string]Format{
+	"text":   FormatText,
+	"json":   FormatJSON,
+	"github": FormatGitHub,
+	"junit":  FormatJUnit,
+}
+
+func ParseFormat(s string) (Format, error) {
+	if f, ok := formatNames[s]; ok {
+		return f, nil
+	}
+	names := make([]string, 0, len(formatNames))
+	for k := range formatNames {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return 0, fmt.Errorf("unknown format %q (supported: %s)", s, strings.Join(names, ", "))
+}
 
 func Report(w io.Writer, violations []linter.Violation, format Format, version string) {
 	switch format {

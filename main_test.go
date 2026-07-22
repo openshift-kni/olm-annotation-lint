@@ -278,6 +278,7 @@ func TestMainOutputFormats(t *testing.T) {
 		{"text format", "text", "[ERROR]"},
 		{"json format", "json", `"severity"`},
 		{"github format", "github", "::error file="},
+		{"junit format", "junit", "<testsuites"},
 	}
 
 	for _, tt := range tests {
@@ -287,6 +288,26 @@ func TestMainOutputFormats(t *testing.T) {
 				t.Errorf("expected %q in %s output, got: %s", tt.contains, tt.format, out)
 			}
 		})
+	}
+}
+
+func TestMainUnknownFormat(t *testing.T) {
+	bin := testBinary
+
+	cmd := exec.Command(bin, "--path", "testdata/valid", "--format", "xml") //nolint:gosec // test runs locally built binary
+	out, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitError, got: %v", err)
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Errorf("expected exit code 2 for unknown format, got %d", exitErr.ExitCode())
+	}
+	if !strings.Contains(string(out), `unknown format "xml"`) {
+		t.Errorf("expected unknown format error, got: %s", out)
+	}
+	if !strings.Contains(string(out), "github, json, junit, text") {
+		t.Errorf("expected supported formats listed, got: %s", out)
 	}
 }
 

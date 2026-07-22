@@ -352,6 +352,36 @@ func TestReportJUnitXMLEscaping(t *testing.T) {
 	}
 }
 
+func TestParseFormat(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    reporter.Format
+		wantErr bool
+	}{
+		{"text", reporter.FormatText, false},
+		{"json", reporter.FormatJSON, false},
+		{"github", reporter.FormatGitHub, false},
+		{"junit", reporter.FormatJUnit, false},
+		{"xml", 0, true},
+		{"", 0, true},
+		{"TEXT", 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := reporter.ParseFormat(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseFormat(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("ParseFormat(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+			if err != nil && !strings.Contains(err.Error(), "unknown format") {
+				t.Errorf("expected 'unknown format' in error, got: %v", err)
+			}
+		})
+	}
+}
+
 func TestHasErrors(t *testing.T) {
 	if !reporter.HasErrors(testViolations, false) {
 		t.Error("expected HasErrors to return true with error violations")

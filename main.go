@@ -158,16 +158,10 @@ func main() {
 		os.Exit(2)
 	}
 
-	var outputFormat reporter.Format
-	switch format {
-	case "json":
-		outputFormat = reporter.FormatJSON
-	case "github":
-		outputFormat = reporter.FormatGitHub
-	case "junit":
-		outputFormat = reporter.FormatJUnit
-	default:
-		outputFormat = reporter.FormatText
+	outputFormat, err := reporter.ParseFormat(format)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(2)
 	}
 
 	if len(violations) > 0 {

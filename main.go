@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -70,6 +71,10 @@ func discoverConfig() (*config, error) {
 }
 
 func main() {
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+func run(args []string, stdout, stderr io.Writer) int {
 	var (
 		path        string
 		exclude     string
@@ -81,36 +86,41 @@ func main() {
 		listRules   bool
 	)
 
-	flag.StringVar(&path, "path", ".", "Path or comma-separated paths to scan")
-	flag.StringVar(&path, "p", ".", "Path or comma-separated paths to scan (shorthand)")
-	flag.StringVar(&exclude, "exclude", "", "Comma-separated paths to exclude")
-	flag.StringVar(&exclude, "e", "", "Comma-separated paths to exclude (shorthand)")
-	flag.StringVar(&allow, "allow", "", "Comma-separated annotation keys to allow (bypass unknown annotation errors)")
-	flag.StringVar(&allow, "a", "", "Comma-separated annotation keys to allow (shorthand)")
-	flag.BoolVar(&strict, "strict", false, "Treat warnings as errors")
-	flag.BoolVar(&strict, "s", false, "Treat warnings as errors (shorthand)")
-	flag.StringVar(&format, "format", "text", "Output format: text, json, github, junit, sarif")
-	flag.StringVar(&format, "f", "text", "Output format: text, json, github, junit, sarif (shorthand)")
-	flag.StringVar(&configPath, "config", "", "Path to config file (default: .olm-lint.yaml in current directory)")
-	flag.StringVar(&configPath, "c", "", "Path to config file (shorthand)")
-	flag.BoolVar(&showVersion, "version", false, "Print version and exit")
-	flag.BoolVar(&showVersion, "v", false, "Print version and exit (shorthand)")
-	flag.BoolVar(&listRules, "list-rules", false, "List all known OLM annotations and exit")
-	flag.BoolVar(&listRules, "l", false, "List all known OLM annotations and exit (shorthand)")
-	flag.Parse()
+	fs := flag.NewFlagSet("olm-annotation-lint", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.StringVar(&path, "path", ".", "Path or comma-separated paths to scan")
+	fs.StringVar(&path, "p", ".", "Path or comma-separated paths to scan (shorthand)")
+	fs.StringVar(&exclude, "exclude", "", "Comma-separated paths to exclude")
+	fs.StringVar(&exclude, "e", "", "Comma-separated paths to exclude (shorthand)")
+	fs.StringVar(&allow, "allow", "", "Comma-separated annotation keys to allow (bypass unknown annotation errors)")
+	fs.StringVar(&allow, "a", "", "Comma-separated annotation keys to allow (shorthand)")
+	fs.BoolVar(&strict, "strict", false, "Treat warnings as errors")
+	fs.BoolVar(&strict, "s", false, "Treat warnings as errors (shorthand)")
+	fs.StringVar(&format, "format", "text", "Output format: text, json, github, junit, sarif")
+	fs.StringVar(&format, "f", "text", "Output format: text, json, github, junit, sarif (shorthand)")
+	fs.StringVar(&configPath, "config", "", "Path to config file (default: .olm-lint.yaml in current directory)")
+	fs.StringVar(&configPath, "c", "", "Path to config file (shorthand)")
+	fs.BoolVar(&showVersion, "version", false, "Print version and exit")
+	fs.BoolVar(&showVersion, "v", false, "Print version and exit (shorthand)")
+	fs.BoolVar(&listRules, "list-rules", false, "List all known OLM annotations and exit")
+	fs.BoolVar(&listRules, "l", false, "List all known OLM annotations and exit (shorthand)")
+
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
 
 	if showVersion {
-		fmt.Println(version)
-		return
+		_, _ = fmt.Fprintln(stdout, version)
+		return 0
 	}
 
 	if listRules {
-		rules.PrintRules(os.Stdout)
-		return
+		rules.PrintRules(stdout)
+		return 0
 	}
 
 	setFlags := map[string]bool{}
-	flag.Visit(func(f *flag.Flag) { setFlags[f.Name] = true })
+	fs.Visit(func(f *flag.Flag) { setFlags[f.Name] = true })
 
 	var cfg *config
 	var err error
@@ -120,8 +130,8 @@ func main() {
 		cfg, err = discoverConfig()
 	}
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(2)
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
 	}
 
 	paths := splitAndTrim(path)
@@ -158,18 +168,18 @@ func main() {
 		AllowedAnnotations: allowedAnnotations,
 	})
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(2)
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
 	}
 
 	outputFormat, err := reporter.ParseFormat(format)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(2)
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
 	}
 
 	if len(violations) > 0 {
-		reporter.Report(os.Stdout, violations, outputFormat, version)
+		reporter.Report(stdout, violations, outputFormat, version)
 	}
 
 	var errorCount, warningCount int
@@ -189,13 +199,15 @@ func main() {
 	}
 
 	if hasErrors {
-		_, _ = fmt.Fprintf(os.Stderr, "\nFound %d error(s) and %d warning(s)\n", errorCount, warningCount)
-		os.Exit(1)
+		_, _ = fmt.Fprintf(stderr, "\nFound %d error(s) and %d warning(s)\n", errorCount, warningCount)
+		return 1
 	}
 
 	if warningCount > 0 {
-		_, _ = fmt.Fprintf(os.Stderr, "\nFound %d warning(s)\n", warningCount)
+		_, _ = fmt.Fprintf(stderr, "\nFound %d warning(s)\n", warningCount)
 	}
+
+	return 0
 }
 
 func writeGitHubOutputs(path string, errors, warnings, total int, hasErrors bool) {

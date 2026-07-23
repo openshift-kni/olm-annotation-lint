@@ -1,8 +1,8 @@
 package main
 
 import (
+	"bytes"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,22 +11,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
-
-var testBinary string
-
-func TestMain(m *testing.M) {
-	bin := filepath.Join(os.TempDir(), "olm-annotation-lint-test")
-	cmd := exec.Command("go", "build", "-o", bin, ".") //nolint:gosec // builds from local source for testing
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to build test binary: %v\n%s", err, out)
-		os.Exit(1)
-	}
-	testBinary = bin
-	code := m.Run()
-	_ = os.Remove(bin)
-	os.Exit(code)
-}
 
 func TestSplitAndTrim(t *testing.T) {
 	tests := []struct {
@@ -228,30 +212,29 @@ func TestDiscoverConfig(t *testing.T) {
 	})
 }
 
-func TestMainVersion(t *testing.T) {
-	out, err := exec.Command(testBinary, "--version").Output() //nolint:gosec // test runs locally built binary
-	if err != nil {
-		t.Fatalf("--version failed: %v", err)
+func TestRunVersion(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--version"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
 	}
-	if strings.TrimSpace(string(out)) == "" {
+	if strings.TrimSpace(stdout.String()) == "" {
 		t.Error("expected version output, got empty string")
 	}
 }
 
-func TestMainListRules(t *testing.T) {
-	bin := testBinary
-	out, err := exec.Command(bin, "--list-rules").Output() //nolint:gosec // test runs locally built binary
-	if err != nil {
-		t.Fatalf("--list-rules failed: %v", err)
+func TestRunListRules(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--list-rules"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
 	}
-	if !strings.Contains(string(out), "User-settable annotations") {
+	if !strings.Contains(stdout.String(), "User-settable annotations") {
 		t.Error("expected 'User-settable annotations' in --list-rules output")
 	}
 }
 
-func TestMainExitCodes(t *testing.T) {
-	bin := testBinary
-
+func TestRunExitCodes(t *testing.T) {
 	tests := []struct {
 		name     string
 		args     []string
@@ -264,28 +247,16 @@ func TestMainExitCodes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := exec.Command(bin, tt.args...) //nolint:gosec // test runs locally built binary
-			err := cmd.Run()
-			if tt.exitCode == 0 {
-				if err != nil {
-					t.Errorf("expected exit 0, got error: %v", err)
-				}
-				return
-			}
-			var exitErr *exec.ExitError
-			if !errors.As(err, &exitErr) {
-				t.Fatalf("expected ExitError, got: %v", err)
-			}
-			if exitErr.ExitCode() != tt.exitCode {
-				t.Errorf("expected exit code %d, got %d", tt.exitCode, exitErr.ExitCode())
+			var stdout, stderr bytes.Buffer
+			code := run(tt.args, &stdout, &stderr)
+			if code != tt.exitCode {
+				t.Errorf("expected exit code %d, got %d\nstdout: %s\nstderr: %s", tt.exitCode, code, stdout.String(), stderr.String())
 			}
 		})
 	}
 }
 
-func TestMainOutputFormats(t *testing.T) {
-	bin := testBinary
-
+func TestRunOutputFormats(t *testing.T) {
 	tests := []struct {
 		name     string
 		format   string
@@ -300,37 +271,32 @@ func TestMainOutputFormats(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out, _ := exec.Command(bin, "--path", "testdata/invalid/unknown_olm_annotation.yaml", "--format", tt.format).CombinedOutput() //nolint:gosec // test runs locally built binary
-			if !strings.Contains(string(out), tt.contains) {
-				t.Errorf("expected %q in %s output, got: %s", tt.contains, tt.format, out)
+			var stdout, stderr bytes.Buffer
+			run([]string{"--path", "testdata/invalid/unknown_olm_annotation.yaml", "--format", tt.format}, &stdout, &stderr)
+			combined := stdout.String() + stderr.String()
+			if !strings.Contains(combined, tt.contains) {
+				t.Errorf("expected %q in %s output, got: %s", tt.contains, tt.format, combined)
 			}
 		})
 	}
 }
 
-func TestMainUnknownFormat(t *testing.T) {
-	bin := testBinary
-
-	cmd := exec.Command(bin, "--path", "testdata/valid", "--format", "xml") //nolint:gosec // test runs locally built binary
-	out, err := cmd.CombinedOutput()
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("expected ExitError, got: %v", err)
+func TestRunUnknownFormat(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--path", "testdata/valid", "--format", "xml"}, &stdout, &stderr)
+	if code != 2 {
+		t.Errorf("expected exit code 2 for unknown format, got %d", code)
 	}
-	if exitErr.ExitCode() != 2 {
-		t.Errorf("expected exit code 2 for unknown format, got %d", exitErr.ExitCode())
+	combined := stdout.String() + stderr.String()
+	if !strings.Contains(combined, `unknown format "xml"`) {
+		t.Errorf("expected unknown format error, got: %s", combined)
 	}
-	if !strings.Contains(string(out), `unknown format "xml"`) {
-		t.Errorf("expected unknown format error, got: %s", out)
-	}
-	if !strings.Contains(string(out), "github, json, junit, sarif, text") {
-		t.Errorf("expected supported formats listed, got: %s", out)
+	if !strings.Contains(combined, "github, json, junit, sarif, text") {
+		t.Errorf("expected supported formats listed, got: %s", combined)
 	}
 }
 
-func TestMainConfigFile(t *testing.T) {
-	bin := testBinary
-
+func TestRunConfigFile(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "test-config.yaml")
 	content := "path: testdata/valid\n"
@@ -338,15 +304,14 @@ func TestMainConfigFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command(bin, "--config", cfgPath) //nolint:gosec // test runs locally built binary
-	if err := cmd.Run(); err != nil {
-		t.Errorf("expected exit 0 with valid config pointing to valid testdata, got: %v", err)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--config", cfgPath}, &stdout, &stderr)
+	if code != 0 {
+		t.Errorf("expected exit 0 with valid config pointing to valid testdata, got: %d\nstderr: %s", code, stderr.String())
 	}
 }
 
-func TestMainConfigFlagOverride(t *testing.T) {
-	bin := testBinary
-
+func TestRunConfigFlagOverride(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "test-config.yaml")
 	content := "path: /nonexistent/should/be/overridden\n"
@@ -354,15 +319,14 @@ func TestMainConfigFlagOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command(bin, "--config", cfgPath, "--path", "testdata/valid") //nolint:gosec // test runs locally built binary
-	if err := cmd.Run(); err != nil {
-		t.Errorf("CLI --path should override config path, got: %v", err)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--config", cfgPath, "--path", "testdata/valid"}, &stdout, &stderr)
+	if code != 0 {
+		t.Errorf("CLI --path should override config path, got exit %d\nstderr: %s", code, stderr.String())
 	}
 }
 
-func TestMainConfigFormat(t *testing.T) {
-	bin := testBinary
-
+func TestRunConfigFormat(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "test-config.yaml")
 	content := "path: testdata/invalid/unknown_olm_annotation.yaml\nformat: json\n"
@@ -370,15 +334,14 @@ func TestMainConfigFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, _ := exec.Command(bin, "--config", cfgPath).CombinedOutput() //nolint:gosec // test runs locally built binary
-	if !strings.Contains(string(out), `"severity"`) {
-		t.Errorf("expected JSON output from config format, got: %s", out)
+	var stdout, stderr bytes.Buffer
+	run([]string{"--config", cfgPath}, &stdout, &stderr)
+	if !strings.Contains(stdout.String(), `"severity"`) {
+		t.Errorf("expected JSON output from config format, got: %s", stdout.String())
 	}
 }
 
-func TestMainConfigFormatCLIOverride(t *testing.T) {
-	bin := testBinary
-
+func TestRunConfigFormatCLIOverride(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "test-config.yaml")
 	content := "path: testdata/invalid/unknown_olm_annotation.yaml\nformat: json\n"
@@ -386,18 +349,18 @@ func TestMainConfigFormatCLIOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, _ := exec.Command(bin, "--config", cfgPath, "--format", "text").CombinedOutput() //nolint:gosec // test runs locally built binary
-	if !strings.Contains(string(out), "[ERROR]") {
-		t.Errorf("expected text output when CLI overrides config, got: %s", out)
+	var stdout, stderr bytes.Buffer
+	run([]string{"--config", cfgPath, "--format", "text"}, &stdout, &stderr)
+	combined := stdout.String() + stderr.String()
+	if !strings.Contains(combined, "[ERROR]") {
+		t.Errorf("expected text output when CLI overrides config, got: %s", combined)
 	}
-	if strings.Contains(string(out), `"severity"`) {
+	if strings.Contains(stdout.String(), `"severity"`) {
 		t.Errorf("expected CLI --format to override config format")
 	}
 }
 
-func TestMainConfigFormatShortFlagOverride(t *testing.T) {
-	bin := testBinary
-
+func TestRunConfigFormatShortFlagOverride(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "test-config.yaml")
 	content := "path: testdata/invalid/unknown_olm_annotation.yaml\nformat: json\n"
@@ -405,18 +368,18 @@ func TestMainConfigFormatShortFlagOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, _ := exec.Command(bin, "--config", cfgPath, "-f", "text").CombinedOutput() //nolint:gosec // test runs locally built binary
-	if !strings.Contains(string(out), "[ERROR]") {
-		t.Errorf("expected text output when -f overrides config, got: %s", out)
+	var stdout, stderr bytes.Buffer
+	run([]string{"--config", cfgPath, "-f", "text"}, &stdout, &stderr)
+	combined := stdout.String() + stderr.String()
+	if !strings.Contains(combined, "[ERROR]") {
+		t.Errorf("expected text output when -f overrides config, got: %s", combined)
 	}
-	if strings.Contains(string(out), `"severity"`) {
+	if strings.Contains(stdout.String(), `"severity"`) {
 		t.Errorf("expected -f flag to override config format")
 	}
 }
 
-func TestMainConfigFormatInvalid(t *testing.T) {
-	bin := testBinary
-
+func TestRunConfigFormatInvalid(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "test-config.yaml")
 	content := "path: testdata/valid\nformat: xml\n"
@@ -424,43 +387,137 @@ func TestMainConfigFormatInvalid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command(bin, "--config", cfgPath) //nolint:gosec // test runs locally built binary
-	out, err := cmd.CombinedOutput()
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("expected ExitError for invalid config format, got: %v", err)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--config", cfgPath}, &stdout, &stderr)
+	if code != 2 {
+		t.Errorf("expected exit code 2, got %d", code)
 	}
-	if exitErr.ExitCode() != 2 {
-		t.Errorf("expected exit code 2, got %d", exitErr.ExitCode())
-	}
-	if !strings.Contains(string(out), `unknown format "xml"`) {
-		t.Errorf("expected unknown format error, got: %s", out)
+	combined := stdout.String() + stderr.String()
+	if !strings.Contains(combined, `unknown format "xml"`) {
+		t.Errorf("expected unknown format error, got: %s", combined)
 	}
 }
 
-func TestMainInvalidConfig(t *testing.T) {
-	bin := testBinary
-
+func TestRunInvalidConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "bad-config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(":::invalid"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command(bin, "--config", cfgPath) //nolint:gosec // test runs locally built binary
-	err := cmd.Run()
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("expected ExitError, got: %v", err)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--config", cfgPath}, &stdout, &stderr)
+	if code != 2 {
+		t.Errorf("expected exit code 2 for invalid config, got %d", code)
 	}
-	if exitErr.ExitCode() != 2 {
-		t.Errorf("expected exit code 2 for invalid config, got %d", exitErr.ExitCode())
+}
+
+func TestRunInvalidFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--nonexistent-flag"}, &stdout, &stderr)
+	if code != 2 {
+		t.Errorf("expected exit code 2 for invalid flag, got %d", code)
+	}
+}
+
+func TestRunWarningOnlyExitCode(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--path", "testdata/invalid/controller_managed_annotation.yaml"}, &stdout, &stderr)
+	if code != 0 {
+		t.Errorf("expected exit 0 for warning-only violations, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "warning(s)") {
+		t.Errorf("expected warning count in stderr, got: %s", stderr.String())
+	}
+}
+
+func TestRunExcludeFlag(t *testing.T) {
+	dir := t.TempDir()
+	subdir := filepath.Join(dir, "excluded")
+	if err := os.MkdirAll(subdir, 0o750); err != nil { //nolint:gosec // test directory
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile("testdata/invalid/controller_managed_annotation.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subdir, "test.yaml"), data, 0o600); err != nil { //nolint:gosec // test writes to temp dir
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	run([]string{"--path", dir, "--exclude", "excluded"}, &stdout, &stderr)
+	if strings.Contains(stdout.String(), "controller-managed") {
+		t.Error("excluded directory should not produce violations")
+	}
+}
+
+func TestRunAllowFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	run([]string{"--path", "testdata/invalid/unknown_olm_annotation.yaml", "--allow", "olm.operatorframework.io/bundle-install-timeout"}, &stdout, &stderr)
+	if !strings.Contains(stdout.String(), "allowed via user override") {
+		t.Errorf("expected allowed-override message, got: %s", stdout.String())
+	}
+}
+
+func TestRunConfigMergeExclude(t *testing.T) {
+	dir := t.TempDir()
+	subdir := filepath.Join(dir, "skipme")
+	if err := os.MkdirAll(subdir, 0o750); err != nil { //nolint:gosec // test directory
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile("testdata/invalid/controller_managed_annotation.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subdir, "test.yaml"), data, 0o600); err != nil { //nolint:gosec // test writes to temp dir
+		t.Fatal(err)
+	}
+
+	cfgPath := filepath.Join(dir, "test-config.yaml")
+	content := "path: " + dir + "\nexclude:\n  - skipme\n"
+	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	run([]string{"--config", cfgPath}, &stdout, &stderr)
+	if strings.Contains(stdout.String(), "controller-managed") {
+		t.Error("config exclude should prevent controller-managed violations")
+	}
+}
+
+func TestRunConfigMergeAllow(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "test-config.yaml")
+	content := "path: testdata/invalid/unknown_olm_annotation.yaml\nallow:\n  - olm.operatorframework.io/bundle-install-timeout\n"
+	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	run([]string{"--config", cfgPath}, &stdout, &stderr)
+	if !strings.Contains(stdout.String(), "allowed via user override") {
+		t.Errorf("expected allowed-override from config allow, got: %s", stdout.String())
+	}
+}
+
+func TestRunConfigMergeStrict(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "test-config.yaml")
+	content := "path: testdata/invalid/controller_managed_annotation.yaml\nstrict: true\n"
+	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--config", cfgPath}, &stdout, &stderr)
+	if code != 1 {
+		t.Errorf("expected exit 1 when config strict escalates warnings, got %d", code)
 	}
 }
 
 func TestGitHubOutputs(t *testing.T) {
-	bin := testBinary
-
 	tests := []struct {
 		name        string
 		args        []string
@@ -489,9 +546,10 @@ func TestGitHubOutputs(t *testing.T) {
 			}
 			_ = tmpFile.Close()
 
-			cmd := exec.Command(bin, tt.args...) //nolint:gosec // test runs locally built binary
-			cmd.Env = append(os.Environ(), "GITHUB_OUTPUT="+tmpFile.Name())
-			_ = cmd.Run()
+			t.Setenv("GITHUB_OUTPUT", tmpFile.Name())
+
+			var stdout, stderr bytes.Buffer
+			run(tt.args, &stdout, &stderr)
 
 			data, err := os.ReadFile(tmpFile.Name())
 			if err != nil {
@@ -516,15 +574,55 @@ func TestGitHubOutputs(t *testing.T) {
 }
 
 func TestGitHubOutputsNotWrittenWithoutEnv(t *testing.T) {
-	bin := testBinary
+	t.Setenv("GITHUB_OUTPUT", "")
 
-	cmd := exec.Command(bin, "--path", "testdata/valid") //nolint:gosec // test runs locally built binary
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME")}
+	var stdout, stderr bytes.Buffer
+	run([]string{"--path", "testdata/valid"}, &stdout, &stderr)
+	combined := stdout.String() + stderr.String()
+	if strings.Contains(combined, "error-count=") {
+		t.Error("expected no GitHub output lines in stdout/stderr when GITHUB_OUTPUT is not set")
+	}
+}
+
+func TestMainBinaryExitCode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping binary test in short mode")
+	}
+
+	bin := filepath.Join(t.TempDir(), "olm-annotation-lint-test")
+	cmd := exec.Command("go", "build", "-o", bin, ".") //nolint:gosec // builds from local source for testing
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("unexpected error: %v\n%s", err, out)
+		t.Fatalf("failed to build test binary: %v\n%s", err, out)
 	}
-	if strings.Contains(string(out), "error-count=") {
-		t.Error("expected no GitHub output lines in stdout/stderr when GITHUB_OUTPUT is not set")
+
+	tests := []struct {
+		name     string
+		args     []string
+		exitCode int
+	}{
+		{"exit 0", []string{"--path", "testdata/valid"}, 0},
+		{"exit 1", []string{"--path", "testdata/invalid/unknown_olm_annotation.yaml", "--strict"}, 1},
+		{"exit 2", []string{"--path", "/nonexistent/path"}, 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := exec.Command(bin, tt.args...) //nolint:gosec // test runs locally built binary
+			err := cmd.Run()
+			if tt.exitCode == 0 {
+				if err != nil {
+					t.Errorf("expected exit 0, got error: %v", err)
+				}
+				return
+			}
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) {
+				t.Fatalf("expected ExitError, got: %v", err)
+			}
+			if exitErr.ExitCode() != tt.exitCode {
+				t.Errorf("expected exit code %d, got %d", tt.exitCode, exitErr.ExitCode())
+			}
+		})
 	}
 }

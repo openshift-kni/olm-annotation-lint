@@ -38,7 +38,18 @@ const (
 	RuleControllerManaged = "controller-managed"
 	RuleWrongResourceKind = "wrong-resource-kind"
 	RuleInvalidValue      = "invalid-value"
+	RuleMissingAnnotation = "missing-annotation"
 )
+
+var RequiredBundleAnnotations []string
+
+func init() {
+	for _, r := range bundleAnnotations {
+		if r.Required {
+			RequiredBundleAnnotations = append(RequiredBundleAnnotations, r.Key)
+		}
+	}
+}
 
 type ValueFormat int
 
@@ -56,6 +67,7 @@ type AnnotationRule struct {
 	Key           string
 	ResourceKinds []string
 	UserSettable  bool
+	Required      bool
 	Format        ValueFormat
 	Description   string
 }
@@ -184,6 +196,7 @@ var bundleAnnotations = []AnnotationRule{
 		Key:           "operators.operatorframework.io.bundle.mediatype.v1",
 		ResourceKinds: []string{KindBundleAnnotations},
 		UserSettable:  true,
+		Required:      true,
 		Format:        FormatBundleMediatype,
 		Description:   "Bundle format type",
 	},
@@ -191,6 +204,7 @@ var bundleAnnotations = []AnnotationRule{
 		Key:           "operators.operatorframework.io.bundle.manifests.v1",
 		ResourceKinds: []string{KindBundleAnnotations},
 		UserSettable:  true,
+		Required:      true,
 		Format:        FormatString,
 		Description:   "Path to manifests directory in the bundle image",
 	},
@@ -198,6 +212,7 @@ var bundleAnnotations = []AnnotationRule{
 		Key:           "operators.operatorframework.io.bundle.metadata.v1",
 		ResourceKinds: []string{KindBundleAnnotations},
 		UserSettable:  true,
+		Required:      true,
 		Format:        FormatString,
 		Description:   "Path to metadata directory in the bundle image",
 	},
@@ -205,6 +220,7 @@ var bundleAnnotations = []AnnotationRule{
 		Key:           "operators.operatorframework.io.bundle.package.v1",
 		ResourceKinds: []string{KindBundleAnnotations},
 		UserSettable:  true,
+		Required:      true,
 		Format:        FormatString,
 		Description:   "Operator package name",
 	},
@@ -212,6 +228,7 @@ var bundleAnnotations = []AnnotationRule{
 		Key:           "operators.operatorframework.io.bundle.channels.v1",
 		ResourceKinds: []string{KindBundleAnnotations},
 		UserSettable:  true,
+		Required:      true,
 		Format:        FormatCommaSeparated,
 		Description:   "Comma-separated list of channels this bundle belongs to",
 	},

@@ -333,5 +333,18 @@ func lintBundleAnnotations(node *yaml.Node, source string, allowSet map[string]b
 		violations = append(violations, v...)
 	}
 
+	for _, req := range rules.RequiredBundleAnnotations {
+		if _, exists := bundle.Annotations[req]; !exists {
+			violations = append(violations, Violation{
+				File:       source,
+				Annotation: req,
+				Kind:       rules.KindBundleAnnotations,
+				Severity:   rules.SeverityWarning,
+				Rule:       rules.RuleMissingAnnotation,
+				Message:    fmt.Sprintf("required bundle annotation %q is missing", req),
+			})
+		}
+	}
+
 	return violations
 }

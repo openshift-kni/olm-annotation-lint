@@ -77,6 +77,7 @@ var ruleDescriptions = map[string]string{
 	rules.RuleControllerManaged: "Controller-managed annotation",
 	rules.RuleWrongResourceKind: "Annotation on wrong resource kind",
 	rules.RuleInvalidValue:      "Invalid annotation value",
+	rules.RuleMissingAnnotation: "Required bundle annotation missing",
 }
 
 func sarifLevel(s rules.Severity) string {

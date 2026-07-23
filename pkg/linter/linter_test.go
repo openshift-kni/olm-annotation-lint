@@ -771,6 +771,8 @@ another_key: another_value
 func TestBundleAnnotationsLintData(t *testing.T) {
 	data := []byte(`annotations:
   operators.operatorframework.io.bundle.mediatype.v1: registry+v1
+  operators.operatorframework.io.bundle.manifests.v1: manifests/
+  operators.operatorframework.io.bundle.metadata.v1: metadata/
   operators.operatorframework.io.bundle.package.v1: my-operator
   operators.operatorframework.io.bundle.channels.v1: alpha
   operators.operatorframework.io.bundle.channel.default.v1: alpha
@@ -789,6 +791,8 @@ func TestBundleAnnotationsLintData(t *testing.T) {
 func TestBundleAnnotationsLintDataBadMediatype(t *testing.T) {
 	data := []byte(`annotations:
   operators.operatorframework.io.bundle.mediatype.v1: bad-value
+  operators.operatorframework.io.bundle.manifests.v1: manifests/
+  operators.operatorframework.io.bundle.metadata.v1: metadata/
   operators.operatorframework.io.bundle.package.v1: my-operator
   operators.operatorframework.io.bundle.channels.v1: alpha
   operators.operatorframework.io.bundle.channel.default.v1: alpha
@@ -800,6 +804,80 @@ func TestBundleAnnotationsLintDataBadMediatype(t *testing.T) {
 	found := findViolation(violations, "operators.operatorframework.io.bundle.mediatype.v1", "invalid bundle mediatype")
 	if !found {
 		t.Error("expected violation for bad bundle mediatype in LintData")
+	}
+}
+
+func TestBundleMissingAnnotations(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/bundle_missing_annotations.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	missing := []string{
+		"operators.operatorframework.io.bundle.manifests.v1",
+		"operators.operatorframework.io.bundle.metadata.v1",
+		"operators.operatorframework.io.bundle.channels.v1",
+	}
+	for _, key := range missing {
+		if !findViolation(violations, key, "required bundle annotation") {
+			t.Errorf("expected missing-annotation warning for %s", key)
+		}
+		if rule := findViolationRule(violations, key); rule != rules.RuleMissingAnnotation {
+			t.Errorf("expected rule %q for %s, got %q", rules.RuleMissingAnnotation, key, rule)
+		}
+		for _, v := range violations {
+			if v.Annotation == key && v.Rule == rules.RuleMissingAnnotation {
+				if v.Severity != rules.SeverityWarning {
+					t.Errorf("expected warning severity for %s, got %s", key, v.Severity)
+				}
+				break
+			}
+		}
+	}
+
+	present := []string{
+		"operators.operatorframework.io.bundle.mediatype.v1",
+		"operators.operatorframework.io.bundle.package.v1",
+	}
+	for _, key := range present {
+		if findViolation(violations, key, "required bundle annotation") {
+			t.Errorf("unexpected missing-annotation warning for present key %s", key)
+		}
+	}
+}
+
+func TestBundleMissingAnnotationsLintData(t *testing.T) {
+	data := []byte(`annotations:
+  operators.operatorframework.io.bundle.mediatype.v1: registry+v1
+`)
+	violations, err := linter.LintData(data, "<test>", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var missingCount int
+	for _, v := range violations {
+		if v.Rule == rules.RuleMissingAnnotation {
+			missingCount++
+		}
+	}
+	if missingCount != 4 {
+		t.Errorf("expected 4 missing-annotation warnings (manifests, metadata, package, channels), got %d", missingCount)
+	}
+}
+
+func TestBundleCompleteAnnotationsNoWarnings(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/valid/bundle_annotations.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, v := range violations {
+		if v.Rule == rules.RuleMissingAnnotation {
+			t.Errorf("unexpected missing-annotation warning: %s", v.Annotation)
+		}
 	}
 }
 

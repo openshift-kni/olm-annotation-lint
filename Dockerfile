@@ -1,9 +1,10 @@
 FROM golang:1.26-alpine AS builder
+ARG VERSION=dev
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -ldflags "-s -w" -o /bin/olm-annotation-lint .
+RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${VERSION}" -o /bin/olm-annotation-lint .
 
 FROM alpine:3.24
 LABEL org.opencontainers.image.source="https://github.com/openshift-kni/olm-annotation-lint"

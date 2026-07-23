@@ -1,4 +1,6 @@
 BINARY := olm-annotation-lint
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -s -w -X main.version=$(VERSION)
 
 IMAGE ?= quay.io/bapalm/olm-annotation-lint
 TAG ?= latest
@@ -6,7 +8,7 @@ TAG ?= latest
 .PHONY: build test lint clean scenario-test docker-build docker-lint
 
 build:
-	go build -o $(BINARY) .
+	go build -ldflags "$(LDFLAGS)" -o $(BINARY) .
 
 test:
 	go test ./... -v
@@ -44,7 +46,7 @@ scenario-test: build
 	echo "PASS: --list-rules prints annotation list"
 
 docker-build:
-	docker build -t $(IMAGE):$(TAG) .
+	docker build --build-arg VERSION=$(VERSION) -t $(IMAGE):$(TAG) .
 
 docker-lint: docker-build
 	docker run --rm -v $(PWD):/workspace $(IMAGE):$(TAG) --path /workspace

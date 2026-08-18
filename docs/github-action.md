@@ -20,7 +20,7 @@
 | `exclude` | Comma-separated paths to exclude | |
 | `strict` | Treat warnings as errors | `false` |
 | `allow` | Comma-separated annotation keys to bypass unknown annotation errors | |
-| `format` | Output format: `text`, `json`, `github` | `github` |
+| `format` | Output format: `text`, `json`, `github`, `junit`, `sarif` | `github` |
 
 ## Outputs
 
@@ -45,7 +45,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: openshift-kni/olm-annotation-lint@v1
         with:
           path: "."

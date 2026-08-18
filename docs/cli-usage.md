@@ -62,12 +62,14 @@ custom path. CLI flags always take precedence over config file values.
 - `text` (default) — human-readable with file:line references
 - `json` — structured report with summary counts and violation details
 - `github` — GitHub Actions annotation format
+- `junit` — JUnit XML for CI dashboards
+- `sarif` — SARIF 2.1.0 for the GitHub Security tab
 
 ### JSON Format
 
 ```json
 {
-  "version": "1.0.8",
+  "version": "v1.0.10",
   "summary": {
     "errors": 1,
     "warnings": 1,
@@ -80,10 +82,12 @@ custom path. CLI flags always take precedence over config file values.
       "annotation": "olm.fakeAnnotation",
       "kind": "ClusterServiceVersion",
       "severity": "error",
+      "rule": "unknown-annotation",
       "message": "unknown OLM annotation"
     }
   ]
 }
+```
 
 ---
 

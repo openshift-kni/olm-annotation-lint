@@ -9,7 +9,7 @@ A GitHub Action and CLI tool that validates [OLM (Operator Lifecycle Manager)](h
 - **Value Format Checking** — Validates durations, semver ranges, JSON, and templates
 - **Case Mismatch Detection** — Catches `OLM.providedAPIs` vs `olm.providedAPIs`
 - **Controller-Managed Warnings** — Warns when users set annotations OLM manages
-- **Multiple Output Formats** — Text, JSON, and GitHub Actions annotations
+- **Multiple Output Formats** — Text, JSON, GitHub Actions, JUnit, and SARIF
 - **Stdin Support** — Pipe `kubectl get` output directly for validation
 
 ## Quick Start

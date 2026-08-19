@@ -21,6 +21,9 @@
 | `olm.catalogImageTemplate` | CatalogSource | template |
 | `olm.skipRange` | ClusterServiceVersion | semver range |
 | `olm.operatorframework.io/exclude-global-namespace-resolution` | Subscription | string |
+| `operatorframework.io/suggested-namespace` | ClusterServiceVersion | string |
+| `operatorframework.io/suggested-namespace-template` | ClusterServiceVersion | JSON |
+| `operatorframework.io/cluster-monitoring` | ClusterServiceVersion | string |
 
 ## Controller-Managed Annotations (set by OLM, not users)
 
@@ -62,13 +65,15 @@ These annotations are set by the OLM v1 operator-controller on `ClusterObjectSet
 | `olm.operatorframework.io/service-account-name` | ClusterObjectSet |
 | `olm.operatorframework.io/service-account-namespace` | ClusterObjectSet |
 
-## Console Annotations
+## Console and OpenShift Annotations
 
-| Annotation | Resource | Format |
-|---|---|---|
-| `console.openshift.io/disable-operand-delete` | ClusterServiceVersion | string |
-| `features.operators.openshift.io/*` | ClusterServiceVersion | string |
-| `operators.openshift.io/valid-subscription` | ClusterServiceVersion | JSON |
-| `operatorframework.io/properties` | ClusterServiceVersion | JSON |
+These annotations commonly appear on ClusterServiceVersions. Annotations outside the `olm.`, `operatorframework.io/`, and `operators.operatorframework.io.` prefixes are not scanned. `operatorframework.io/properties` is scanned but is not in the known-rules list — use `--allow` if you set it intentionally.
+
+| Annotation | Resource | Format | Notes |
+|---|---|---|---|
+| `console.openshift.io/disable-operand-delete` | ClusterServiceVersion | string | Not scanned (outside OLM prefixes) |
+| `features.operators.openshift.io/*` | ClusterServiceVersion | string | Not scanned |
+| `operators.openshift.io/valid-subscription` | ClusterServiceVersion | JSON | Not scanned |
+| `operatorframework.io/properties` | ClusterServiceVersion | JSON | Scanned; flagged as unknown unless allowed |
 
 Use `olm-annotation-lint --list-rules` to see the complete list with format details.

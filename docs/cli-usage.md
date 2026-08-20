@@ -25,6 +25,7 @@ All flags support both long and short forms:
 | `--strict` | `-s` | Treat warnings as errors |
 | `--format` | `-f` | Output format: text, json, github, junit |
 | `--config` | `-c` | Path to config file |
+| `--timeout` | | Maximum duration (e.g. `30s`, `5m`); 0 means no timeout |
 | `--version` | `-v` | Print version and exit |
 | `--list-rules` | `-l` | List all known OLM annotations and exit |
 

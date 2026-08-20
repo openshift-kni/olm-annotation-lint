@@ -234,6 +234,22 @@ func TestRunListRules(t *testing.T) {
 	}
 }
 
+func TestRunTimeoutFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--timeout", "1h", "--path", "testdata/valid"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0 with long timeout, got %d: %s", code, stderr.String())
+	}
+}
+
+func TestRunTimeoutFlagInvalid(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--timeout", "not-a-duration"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit 2 for invalid timeout, got %d", code)
+	}
+}
+
 func TestRunExitCodes(t *testing.T) {
 	tests := []struct {
 		name     string

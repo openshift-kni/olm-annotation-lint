@@ -881,6 +881,36 @@ func TestBundleCompleteAnnotationsNoWarnings(t *testing.T) {
 	}
 }
 
+func TestLintMixedBundleAnnotations(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/mixed-bundle-annotations.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !findViolation(violations, "operators.operatorframework.io.bundle.nonexistent.v1", "unknown OLM annotation") {
+		t.Error("expected violation for unknown bundle annotation")
+	}
+	if !findViolation(violations, "operators.operatorframework.io.bundle.MediaType.v1", "wrong casing") {
+		t.Error("expected violation for case-mismatched bundle annotation")
+	}
+
+	valid := []string{
+		"operators.operatorframework.io.bundle.mediatype.v1",
+		"operators.operatorframework.io.bundle.manifests.v1",
+		"operators.operatorframework.io.bundle.metadata.v1",
+		"operators.operatorframework.io.bundle.package.v1",
+		"operators.operatorframework.io.bundle.channels.v1",
+		"operators.operatorframework.io.bundle.channel.default.v1",
+	}
+	for _, key := range valid {
+		if findViolation(violations, key, "") {
+			t.Errorf("valid annotation %s should not be flagged", key)
+		}
+	}
+}
+
 func findViolation(violations []linter.Violation, annotation, messageContains string) bool {
 	for _, v := range violations {
 		if v.Annotation == annotation {

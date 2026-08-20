@@ -41,6 +41,15 @@ type Options struct {
 	Paths              []string
 	Exclude            []string
 	AllowedAnnotations []string
+	Rules              map[string]RuleConfig
+}
+
+// RuleConfig overrides whether a rule or annotation is enabled and its severity.
+// Map keys may be an annotation key (e.g. "olm.skipRange") or a rule ID
+// (e.g. "unknown-annotation").
+type RuleConfig struct {
+	Enabled  *bool
+	Severity *rules.Severity
 }
 
 func Run(opts Options) ([]Violation, error) {
@@ -85,7 +94,7 @@ func Run(opts Options) ([]Violation, error) {
 		}
 	}
 
-	return allViolations, nil
+	return applyRuleConfig(allViolations, opts.Rules), nil
 }
 
 func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([]Violation, error) {
@@ -347,4 +356,36 @@ func lintBundleAnnotations(node *yaml.Node, source string, allowSet map[string]b
 	}
 
 	return violations
+}
+
+func applyRuleConfig(violations []Violation, cfg map[string]RuleConfig) []Violation {
+	if len(cfg) == 0 {
+		return violations
+	}
+	var filtered []Violation
+	for _, v := range violations {
+		rc, ok := lookupRuleConfig(cfg, v)
+		if !ok {
+			filtered = append(filtered, v)
+			continue
+		}
+		if rc.Enabled != nil && !*rc.Enabled {
+			continue
+		}
+		if rc.Severity != nil {
+			v.Severity = *rc.Severity
+		}
+		filtered = append(filtered, v)
+	}
+	return filtered
+}
+
+func lookupRuleConfig(cfg map[string]RuleConfig, v Violation) (RuleConfig, bool) {
+	if rc, ok := cfg[v.Annotation]; ok {
+		return rc, true
+	}
+	if rc, ok := cfg[v.Rule]; ok {
+		return rc, true
+	}
+	return RuleConfig{}, false
 }

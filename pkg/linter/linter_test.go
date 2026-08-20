@@ -881,6 +881,64 @@ func TestBundleCompleteAnnotationsNoWarnings(t *testing.T) {
 	}
 }
 
+func boolPtr(b bool) *bool { return &b }
+
+func severityPtr(s rules.Severity) *rules.Severity { return &s }
+
+func TestRuleConfigDisableByAnnotation(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/controller_managed_annotation.yaml"},
+		Rules: map[string]linter.RuleConfig{
+			"olm.operatorGroup": {Enabled: boolPtr(false)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if findViolation(violations, "olm.operatorGroup", "") {
+		t.Error("expected disabled annotation to produce no violation")
+	}
+}
+
+func TestRuleConfigDisableByRuleID(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/unknown_olm_annotation.yaml"},
+		Rules: map[string]linter.RuleConfig{
+			rules.RuleUnknownAnnotation: {Enabled: boolPtr(false)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "unknown OLM annotation") {
+		t.Error("expected unknown-annotation rule to be disabled")
+	}
+}
+
+func TestRuleConfigSeverityOverride(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/unknown_olm_annotation.yaml"},
+		Rules: map[string]linter.RuleConfig{
+			"olm.operatorframework.io/bundle-install-timeout": {Severity: severityPtr(rules.SeverityWarning)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, v := range violations {
+		if v.Annotation == "olm.operatorframework.io/bundle-install-timeout" {
+			found = true
+			if v.Severity != rules.SeverityWarning {
+				t.Errorf("expected warning severity, got %s", v.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected overridden unknown annotation to still be reported")
+	}
+}
+
 func findViolation(violations []linter.Violation, annotation, messageContains string) bool {
 	for _, v := range violations {
 		if v.Annotation == annotation {

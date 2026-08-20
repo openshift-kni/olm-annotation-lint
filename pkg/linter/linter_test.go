@@ -607,6 +607,68 @@ spec:
 	t.Error("expected an info-level notice for the allowed annotation")
 }
 
+func TestAllowPrefixWildcard(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths:              []string{"../../testdata/invalid/unknown_olm_annotation.yaml"},
+		AllowedAnnotations: []string{"olm.operatorframework.io/*"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, v := range violations {
+		if v.Annotation == "olm.operatorframework.io/bundle-install-timeout" {
+			found = true
+			if v.Severity != rules.SeverityInfo {
+				t.Errorf("expected prefix allow to override unknown annotation, got %s", v.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected allowed-override notice for prefix match")
+	}
+}
+
+func TestAllowStarPrefix(t *testing.T) {
+	data := []byte(`apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: test
+  annotations:
+    olm.custom-family: "x"
+`)
+	violations, err := linter.LintData(data, "<test>", []string{"olm.*"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !findViolation(violations, "olm.custom-family", "allowed via user override") {
+		t.Error("expected olm.* to allow olm.custom-family")
+	}
+}
+
+func TestAllowExactStillWorksWithPatterns(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths:              []string{"../../testdata/invalid/unknown_olm_annotation.yaml"},
+		AllowedAnnotations: []string{"olm.operatorframework.io/bundle-install-timeout", "olm.other/*"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "allowed via user override") {
+		t.Error("expected exact allow to still work alongside patterns")
+	}
+}
+
+func TestAllowInvalidPattern(t *testing.T) {
+	_, err := linter.LintData([]byte("kind: ConfigMap\n"), "<test>", []string{"olm.*.foo"})
+	if err == nil {
+		t.Fatal("expected error for invalid allow pattern")
+	}
+	if !strings.Contains(err.Error(), "invalid allow pattern") {
+		t.Errorf("expected invalid allow pattern error, got %v", err)
+	}
+}
+
 func TestExcludeMultiplePatterns(t *testing.T) {
 	violations, err := linter.Run(linter.Options{
 		Paths:   []string{"../../testdata"},

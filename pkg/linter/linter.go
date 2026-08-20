@@ -43,6 +43,41 @@ type Options struct {
 	AllowedAnnotations []string
 }
 
+type allowList struct {
+	exact    map[string]bool
+	prefixes []string
+}
+
+func newAllowList(patterns []string) (allowList, error) {
+	a := allowList{exact: make(map[string]bool, len(patterns))}
+	for _, p := range patterns {
+		if p == "" {
+			continue
+		}
+		if strings.Contains(p, "*") {
+			if !strings.HasSuffix(p, "*") || strings.Count(p, "*") != 1 {
+				return allowList{}, fmt.Errorf("invalid allow pattern %q: only a trailing * wildcard is supported", p)
+			}
+			a.prefixes = append(a.prefixes, strings.TrimSuffix(p, "*"))
+			continue
+		}
+		a.exact[p] = true
+	}
+	return a, nil
+}
+
+func (a allowList) has(key string) bool {
+	if a.exact[key] {
+		return true
+	}
+	for _, prefix := range a.prefixes {
+		if strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func Run(opts Options) ([]Violation, error) {
 	var allViolations []Violation
 	stdinConsumed := false
@@ -133,9 +168,9 @@ func lintFile(path string, allowedAnnotations []string) ([]Violation, error) {
 }
 
 func LintData(data []byte, source string, allowedAnnotations []string) ([]Violation, error) {
-	allowSet := make(map[string]bool, len(allowedAnnotations))
-	for _, a := range allowedAnnotations {
-		allowSet[a] = true
+	allowSet, err := newAllowList(allowedAnnotations)
+	if err != nil {
+		return nil, err
 	}
 
 	var violations []Violation
@@ -192,7 +227,7 @@ func LintData(data []byte, source string, allowedAnnotations []string) ([]Violat
 	return violations, nil
 }
 
-func validateAnnotation(file string, line int, key, value, kind string, allowedAnnotations map[string]bool) []Violation {
+func validateAnnotation(file string, line int, key, value, kind string, allowed allowList) []Violation {
 	var violations []Violation
 
 	newViolation := func(sev rules.Severity, ruleID, msg string) Violation {
@@ -211,7 +246,7 @@ func validateAnnotation(file string, line int, key, value, kind string, allowedA
 			return violations
 		}
 
-		if allowedAnnotations[key] {
+		if allowed.has(key) {
 			violations = append(violations, newViolation(rules.SeverityInfo, rules.RuleAllowedOverride,
 				fmt.Sprintf("annotation %q allowed via user override", key)))
 			return violations
@@ -304,7 +339,7 @@ func findMappingValue(node *yaml.Node, key string) *yaml.Node {
 
 const bundleAnnotationPrefix = "operators.operatorframework.io.bundle."
 
-func lintBundleAnnotations(node *yaml.Node, source string, allowSet map[string]bool) []Violation {
+func lintBundleAnnotations(node *yaml.Node, source string, allowSet allowList) []Violation {
 	var bundle bundleAnnotationsFile
 	if err := node.Decode(&bundle); err != nil || len(bundle.Annotations) == 0 {
 		return nil

@@ -39,6 +39,7 @@ const (
 	RuleWrongResourceKind = "wrong-resource-kind"
 	RuleInvalidValue      = "invalid-value"
 	RuleMissingAnnotation = "missing-annotation"
+	RuleBundlePackage     = "bundle-package-mismatch"
 )
 
 var RequiredBundleAnnotations []string

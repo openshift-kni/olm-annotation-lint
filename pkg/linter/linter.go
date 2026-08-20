@@ -30,6 +30,7 @@ type k8sResource struct {
 }
 
 type metadata struct {
+	Name        string            `yaml:"name"`
 	Annotations map[string]string `yaml:"annotations"`
 }
 
@@ -90,6 +91,7 @@ func Run(opts Options) ([]Violation, error) {
 
 func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([]Violation, error) {
 	var violations []Violation
+	var bundleAnnotationFiles []string
 
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -113,6 +115,10 @@ func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([
 			return nil
 		}
 
+		if isBundleAnnotationsPath(path) {
+			bundleAnnotationFiles = append(bundleAnnotationFiles, path)
+		}
+
 		fileViolations, err := lintFile(path, allowedAnnotations)
 		if err != nil {
 			return err
@@ -120,8 +126,12 @@ func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([
 		violations = append(violations, fileViolations...)
 		return nil
 	})
+	if err != nil {
+		return violations, err
+	}
 
-	return violations, err
+	violations = append(violations, validateBundlePackages(bundleAnnotationFiles)...)
+	return violations, nil
 }
 
 func lintFile(path string, allowedAnnotations []string) ([]Violation, error) {
@@ -347,4 +357,87 @@ func lintBundleAnnotations(node *yaml.Node, source string, allowSet map[string]b
 	}
 
 	return violations
+}
+
+func isBundleAnnotationsPath(path string) bool {
+	return strings.EqualFold(filepath.Base(path), "annotations.yaml") &&
+		strings.EqualFold(filepath.Base(filepath.Dir(path)), "metadata")
+}
+
+func validateBundlePackages(bundleAnnotationFiles []string) []Violation {
+	var violations []Violation
+	for _, annFile := range bundleAnnotationFiles {
+		pkg, err := bundlePackageName(annFile)
+		if err != nil || pkg == "" {
+			continue
+		}
+		manifestsDir := filepath.Join(filepath.Dir(filepath.Dir(annFile)), "manifests")
+		names, err := csvNames(manifestsDir)
+		if err != nil {
+			continue
+		}
+		for _, name := range names {
+			if csvMatchesPackage(name, pkg) {
+				continue
+			}
+			violations = append(violations, Violation{
+				File:       annFile,
+				Annotation: "operators.operatorframework.io.bundle.package.v1",
+				Kind:       rules.KindBundleAnnotations,
+				Severity:   rules.SeverityWarning,
+				Rule:       rules.RuleBundlePackage,
+				Message:    fmt.Sprintf("bundle package %q does not match ClusterServiceVersion name %q", pkg, name),
+			})
+		}
+	}
+	return violations
+}
+
+func bundlePackageName(path string) (string, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // lint target path is user-specified CLI input
+	if err != nil {
+		return "", err
+	}
+	var bundle bundleAnnotationsFile
+	if err := yaml.Unmarshal(data, &bundle); err != nil {
+		return "", err
+	}
+	return bundle.Annotations["operators.operatorframework.io.bundle.package.v1"], nil
+}
+
+func csvNames(manifestsDir string) ([]string, error) {
+	entries, err := os.ReadDir(manifestsDir)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext != ".yaml" && ext != ".yml" {
+			continue
+		}
+		path := filepath.Join(manifestsDir, entry.Name())
+		data, err := os.ReadFile(path) //nolint:gosec // lint target path is user-specified CLI input
+		if err != nil {
+			return nil, err
+		}
+		var resource k8sResource
+		if err := yaml.Unmarshal(data, &resource); err != nil {
+			continue
+		}
+		if resource.Kind == "ClusterServiceVersion" && resource.Metadata.Name != "" {
+			names = append(names, resource.Metadata.Name)
+		}
+	}
+	return names, nil
+}
+
+func csvMatchesPackage(csvName, pkg string) bool {
+	if csvName == pkg {
+		return true
+	}
+	return strings.HasPrefix(csvName, pkg+".")
 }

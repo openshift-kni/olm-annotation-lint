@@ -246,7 +246,7 @@ func validateAnnotation(file string, line int, key, value, kind string, allowedA
 	case rules.FormatTemplate:
 		if !rules.ValidateTemplate(value) {
 			violations = append(violations, newViolation(rules.SeverityError, rules.RuleInvalidValue,
-				fmt.Sprintf("invalid template value %q, unbalanced curly braces", value)))
+				fmt.Sprintf("invalid template value %q, unbalanced braces or unknown variable (allowed: kube_major_version, kube_minor_version, kube_patch_version)", value)))
 		}
 	case rules.FormatSemverRange:
 		if !rules.ValidateSemverRange(value) {

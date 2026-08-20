@@ -332,20 +332,32 @@ func ValidateJSON(value string) bool {
 	return json.Valid([]byte(value))
 }
 
+var allowedTemplateVars = map[string]bool{
+	"kube_major_version": true,
+	"kube_minor_version": true,
+	"kube_patch_version": true,
+}
+
 func ValidateTemplate(value string) bool {
 	depth := 0
-	for _, ch := range value {
+	varNameStart := -1
+	for i, ch := range value {
 		switch ch {
 		case '{':
 			depth++
 			if depth > 1 {
 				return false
 			}
+			varNameStart = i + 1
 		case '}':
 			depth--
 			if depth < 0 {
 				return false
 			}
+			if varNameStart < 0 || !allowedTemplateVars[value[varNameStart:i]] {
+				return false
+			}
+			varNameStart = -1
 		}
 	}
 	return depth == 0

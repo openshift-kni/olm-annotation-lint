@@ -176,8 +176,11 @@ func TestValidateTemplate(t *testing.T) {
 	}{
 		{"with vars", "quay.io/example/catalog:v{kube_major_version}.{kube_minor_version}", true},
 		{"plain string", "quay.io/example/catalog:latest", true},
-		{"single var", "image:{tag}", true},
+		{"single known var", "image:{kube_patch_version}", true},
 		{"empty", "", true},
+		{"unknown var", "image:{tag}", false},
+		{"typo var", "quay.io/example:{typo_variable}", false},
+		{"empty braces", "image:{}", false},
 		{"unclosed brace", "quay.io/example:{unclosed", false},
 		{"extra close", "quay.io/example:closed}", false},
 		{"nested braces", "quay.io/example:{{nested}}", false},

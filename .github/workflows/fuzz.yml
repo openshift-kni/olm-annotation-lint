@@ -1,0 +1,36 @@
+name: Fuzz
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Fuzz YAML parsing
+        run: |
+          if ! go test -list '^Fuzz' ./pkg/linter | grep -q '^FuzzLintData$'; then
+            echo "FuzzLintData not present yet; skipping"
+            exit 0
+          fi
+          go test -fuzz=FuzzLintData -fuzztime=5m ./pkg/linter
+      - name: Fuzz validators
+        run: |
+          if ! go test -list '^Fuzz' ./pkg/rules | grep -q '^Fuzz'; then
+            echo "No pkg/rules fuzz targets yet; skipping"
+            exit 0
+          fi
+          go test -fuzz=FuzzValidateSemverRange -fuzztime=2m ./pkg/rules
+          go test -fuzz=FuzzValidateTemplate -fuzztime=2m ./pkg/rules
+          go test -fuzz=FuzzValidateDuration -fuzztime=2m ./pkg/rules
+          go test -fuzz=FuzzValidateJSON -fuzztime=2m ./pkg/rules

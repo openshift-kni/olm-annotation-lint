@@ -20,7 +20,7 @@ All flags support both long and short forms:
 | Long | Short | Description |
 |------|-------|-------------|
 | `--path` | `-p` | Path or comma-separated paths to scan |
-| `--exclude` | `-e` | Comma-separated paths to exclude |
+| `--exclude` | `-e` | Comma-separated directory names or file globs to skip |
 | `--allow` | `-a` | Comma-separated annotation keys to allow |
 | `--strict` | `-s` | Treat warnings as errors |
 | `--format` | `-f` | Output format: text, json, github, junit |

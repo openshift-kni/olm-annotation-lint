@@ -426,16 +426,27 @@ func formatName(f ValueFormat) string {
 func PrintRules(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "User-settable annotations:")
 	for _, r := range userSettable {
-		_, _ = fmt.Fprintf(w, "  %-65s %s  (%s)\n", r.Key, strings.Join(r.ResourceKinds, ", "), formatName(r.Format))
+		printRule(w, r, true)
 	}
 	_, _ = fmt.Fprintln(w, "")
 	_, _ = fmt.Fprintln(w, "Controller-managed annotations (should not be set by users):")
 	for _, r := range controllerManaged {
-		_, _ = fmt.Fprintf(w, "  %-65s %s\n", r.Key, strings.Join(r.ResourceKinds, ", "))
+		printRule(w, r, true)
 	}
 	_, _ = fmt.Fprintln(w, "")
 	_, _ = fmt.Fprintln(w, "Bundle annotations (in metadata/annotations.yaml):")
 	for _, r := range bundleAnnotations {
+		printRule(w, r, false)
+	}
+}
+
+func printRule(w io.Writer, r AnnotationRule, includeKind bool) {
+	if includeKind {
+		_, _ = fmt.Fprintf(w, "  %-65s %s  (%s)\n", r.Key, strings.Join(r.ResourceKinds, ", "), formatName(r.Format))
+	} else {
 		_, _ = fmt.Fprintf(w, "  %-65s (%s)\n", r.Key, formatName(r.Format))
+	}
+	if r.Description != "" {
+		_, _ = fmt.Fprintf(w, "    %s\n", r.Description)
 	}
 }

@@ -156,15 +156,22 @@ func LintData(data []byte, source string, allowedAnnotations []string) ([]Violat
 			break
 		}
 
+		dups := duplicateKeyViolations(findMappingValue(findMappingValue(&node, "metadata"), "annotations"), source, scalarValue(findMappingValue(&node, "kind")))
+		violations = append(violations, dups...)
+
 		var resource k8sResource
 		if err := node.Decode(&resource); err != nil {
-			violations = append(violations, Violation{
-				File:     source,
-				Line:     node.Line,
-				Severity: rules.SeverityWarning,
-				Message:  fmt.Sprintf("cannot decode as Kubernetes resource: %v", err),
-			})
-			continue
+			if len(dups) > 0 {
+				resource = resourceFromNode(&node)
+			} else {
+				violations = append(violations, Violation{
+					File:     source,
+					Line:     node.Line,
+					Severity: rules.SeverityWarning,
+					Message:  fmt.Sprintf("cannot decode as Kubernetes resource: %v", err),
+				})
+				continue
+			}
 		}
 
 		if resource.APIVersion == "" || resource.Kind == "" {
@@ -284,6 +291,31 @@ func annotationLinesFromNode(node *yaml.Node) map[string]int {
 	return lines
 }
 
+func duplicateKeyViolations(node *yaml.Node, source, kind string) []Violation {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var violations []Violation
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key := node.Content[i].Value
+		if _, dup := seen[key]; dup {
+			violations = append(violations, Violation{
+				File:       source,
+				Line:       node.Content[i].Line,
+				Annotation: key,
+				Kind:       kind,
+				Severity:   rules.SeverityWarning,
+				Rule:       rules.RuleDuplicateKey,
+				Message:    fmt.Sprintf("duplicate annotation key %q", key),
+			})
+			continue
+		}
+		seen[key] = struct{}{}
+	}
+	return violations
+}
+
 func findMappingValue(node *yaml.Node, key string) *yaml.Node {
 	if node == nil {
 		return nil
@@ -302,12 +334,50 @@ func findMappingValue(node *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
+func scalarValue(node *yaml.Node) string {
+	if node == nil {
+		return ""
+	}
+	return node.Value
+}
+
+func mapFromMapping(node *yaml.Node) map[string]string {
+	out := map[string]string{}
+	if node == nil || node.Kind != yaml.MappingNode {
+		return out
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		out[node.Content[i].Value] = node.Content[i+1].Value
+	}
+	return out
+}
+
+func resourceFromNode(node *yaml.Node) k8sResource {
+	meta := findMappingValue(node, "metadata")
+	return k8sResource{
+		APIVersion: scalarValue(findMappingValue(node, "apiVersion")),
+		Kind:       scalarValue(findMappingValue(node, "kind")),
+		Metadata: metadata{
+			Annotations: mapFromMapping(findMappingValue(meta, "annotations")),
+		},
+	}
+}
+
 const bundleAnnotationPrefix = "operators.operatorframework.io.bundle."
 
 func lintBundleAnnotations(node *yaml.Node, source string, allowSet map[string]bool) []Violation {
+	annNode := findMappingValue(node, "annotations")
+	dups := duplicateKeyViolations(annNode, source, rules.KindBundleAnnotations)
+
 	var bundle bundleAnnotationsFile
 	if err := node.Decode(&bundle); err != nil || len(bundle.Annotations) == 0 {
-		return nil
+		if len(dups) == 0 {
+			return nil
+		}
+		bundle.Annotations = mapFromMapping(annNode)
+		if len(bundle.Annotations) == 0 {
+			return dups
+		}
 	}
 
 	hasBundleKey := false
@@ -318,11 +388,12 @@ func lintBundleAnnotations(node *yaml.Node, source string, allowSet map[string]b
 		}
 	}
 	if !hasBundleKey {
-		return nil
+		return dups
 	}
 
-	annotationLines := annotationLinesFromNode(findMappingValue(node, "annotations"))
+	annotationLines := annotationLinesFromNode(annNode)
 	var violations []Violation
+	violations = append(violations, dups...)
 
 	for key, value := range bundle.Annotations {
 		if !rules.IsOLMAnnotation(key) {

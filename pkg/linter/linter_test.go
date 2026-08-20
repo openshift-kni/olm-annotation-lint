@@ -881,6 +881,39 @@ func TestBundleCompleteAnnotationsNoWarnings(t *testing.T) {
 	}
 }
 
+func TestDuplicateAnnotationKeys(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/duplicate-keys.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !findViolation(violations, "olm.skipRange", "duplicate annotation key") {
+		t.Error("expected duplicate-key warning for olm.skipRange")
+	}
+	if rule := findViolationRule(violations, "olm.skipRange"); rule != rules.RuleDuplicateKey {
+		t.Errorf("expected rule duplicate-key, got %q", rule)
+	}
+}
+
+func TestDuplicateAnnotationKeysLintData(t *testing.T) {
+	data := []byte(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test
+  annotations:
+    olm.skipRange: ">=1.0.0 <2.0.0"
+    olm.skipRange: ">=2.0.0 <3.0.0"
+`)
+	violations, err := linter.LintData(data, "<test>", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !findViolation(violations, "olm.skipRange", "duplicate annotation key") {
+		t.Fatalf("expected duplicate key violation, got %#v", violations)
+	}
+}
+
 func findViolation(violations []linter.Violation, annotation, messageContains string) bool {
 	for _, v := range violations {
 		if v.Annotation == annotation {

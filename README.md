@@ -38,6 +38,7 @@ chmod +x olm-annotation-lint
 | [CLI Usage](docs/cli-usage.md) | Flags, configuration file, exit codes, output formats |
 | [GitHub Action](docs/github-action.md) | Action inputs and workflow examples |
 | [Annotations Reference](docs/annotations.md) | All valid OLM annotations and validation rules |
+| [Adopters](ADOPTERS.md) | Repos that could run this linter in CI |
 
 ## Prerequisites
 

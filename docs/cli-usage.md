@@ -49,6 +49,21 @@ Fields accept either a list or a comma-separated string (e.g., `exclude: "vendor
 The config file is auto-discovered in the current directory. Use `--config` to specify a
 custom path. CLI flags always take precedence over config file values.
 
+## Inline ignore directives
+
+Suppress violations for a specific annotation with a YAML comment:
+
+```yaml
+metadata:
+  annotations:
+    # olm-annotation-lint: ignore
+    olm.custom.annotation: "value"
+    olm.operatorGroup: og-test  # olm-annotation-lint: ignore controller-managed
+```
+
+`# olm-annotation-lint: ignore` skips all rules for that key. Add one or more
+rule IDs (from JSON/JUnit/SARIF output) to ignore only those rules.
+
 ## Exit Codes
 
 | Code | Meaning |

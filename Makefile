@@ -21,33 +21,7 @@ lint:
 	golangci-lint run ./...
 
 scenario-test: build
-	@echo "=== Testing valid YAMLs ==="
-	@./$(BINARY) --path testdata/valid && echo "PASS: all valid YAMLs accepted"
-	@echo ""
-	@echo "=== Testing invalid YAMLs (strict mode) ==="
-	@for f in testdata/invalid/*.yaml; do \
-		if ./$(BINARY) --path "$$f" --strict > /dev/null 2>&1; then \
-			echo "FAIL: $$f should have been rejected"; \
-			exit 1; \
-		fi; \
-		echo "PASS: $$f correctly rejected"; \
-	done
-	@echo ""
-	@echo "=== Testing --version flag ==="
-	@OUTPUT=$$(./$(BINARY) --version); \
-	if [ -z "$$OUTPUT" ]; then \
-		echo "FAIL: --version produced no output"; \
-		exit 1; \
-	fi; \
-	echo "PASS: --version prints '$$OUTPUT'"
-	@echo ""
-	@echo "=== Testing --list-rules flag ==="
-	@OUTPUT=$$(./$(BINARY) --list-rules); \
-	if ! echo "$$OUTPUT" | grep -q "User-settable annotations"; then \
-		echo "FAIL: --list-rules missing expected output"; \
-		exit 1; \
-	fi; \
-	echo "PASS: --list-rules prints annotation list"
+	BINARY=./$(BINARY) bash hack/scenario-test.sh
 
 docker-build:
 	docker build --build-arg VERSION=$(VERSION) -t $(IMAGE):$(TAG) .

@@ -153,6 +153,7 @@ type junitTestCase struct {
 	Name      string        `xml:"name,attr"`
 	Classname string        `xml:"classname,attr"`
 	Failure   *junitFailure `xml:"failure,omitempty"`
+	SystemErr string        `xml:"system-err,omitempty"`
 }
 
 type junitFailure struct {
@@ -169,12 +170,15 @@ func reportJUnit(w io.Writer, violations []linter.Violation) {
 			Name:      v.Annotation,
 			Classname: v.File,
 		}
-		if v.Severity == rules.SeverityError || v.Severity == rules.SeverityWarning {
+		switch v.Severity {
+		case rules.SeverityError:
 			tc.Failure = &junitFailure{
 				Message: v.Message,
 				Type:    v.Rule,
 			}
 			failures++
+		case rules.SeverityWarning:
+			tc.SystemErr = v.Message
 		}
 		cases = append(cases, tc)
 	}

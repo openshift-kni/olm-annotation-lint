@@ -367,4 +367,16 @@ func TestPrintRules(t *testing.T) {
 	if !strings.Contains(output, "(bundle mediatype)") {
 		t.Error("expected bundle mediatype format in output")
 	}
+	if !strings.Contains(output, "Examples: 10m, 1h30m") {
+		t.Error("expected duration examples in output")
+	}
+	if !strings.Contains(output, "Since: v1.0.0") {
+		t.Error("expected Since version in output")
+	}
+	if !strings.Contains(output, "docs/annotations.md") {
+		t.Error("expected docs URL in output")
+	}
+	if !strings.Contains(output, ">=1.0.0 <2.0.0") {
+		t.Error("expected semver example in output")
+	}
 }

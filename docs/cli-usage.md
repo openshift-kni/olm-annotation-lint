@@ -81,6 +81,7 @@ custom path. CLI flags always take precedence over config file values.
       "line": 12,
       "annotation": "olm.fakeAnnotation",
       "kind": "ClusterServiceVersion",
+      "name": "test-operator.v1.0.0",
       "severity": "error",
       "rule": "unknown-annotation",
       "message": "unknown OLM annotation"

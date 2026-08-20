@@ -37,6 +37,11 @@ func TestUnknownAnnotation(t *testing.T) {
 	if rule := findViolationRule(violations, "olm.operatorframework.io/bundle-install-timeout"); rule != rules.RuleUnknownAnnotation {
 		t.Errorf("expected rule 'unknown-annotation', got %q", rule)
 	}
+	for _, v := range violations {
+		if v.Annotation == "olm.operatorframework.io/bundle-install-timeout" && v.Name != "cert-manager-operator" {
+			t.Errorf("expected resource name cert-manager-operator, got %q", v.Name)
+		}
+	}
 }
 
 func TestWrongResourceType(t *testing.T) {

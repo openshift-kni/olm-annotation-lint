@@ -18,6 +18,7 @@ type Violation struct {
 	Line       int
 	Annotation string
 	Kind       string
+	Name       string
 	Severity   rules.Severity
 	Rule       string
 	Message    string
@@ -30,6 +31,7 @@ type k8sResource struct {
 }
 
 type metadata struct {
+	Name        string            `yaml:"name"`
 	Annotations map[string]string `yaml:"annotations"`
 }
 
@@ -184,7 +186,7 @@ func LintData(data []byte, source string, allowedAnnotations []string) ([]Violat
 
 			line := annotationLines[key]
 
-			v := validateAnnotation(source, line, key, value, resource.Kind, allowSet)
+			v := validateAnnotation(source, line, key, value, resource.Kind, resource.Metadata.Name, allowSet)
 			violations = append(violations, v...)
 		}
 	}
@@ -192,12 +194,12 @@ func LintData(data []byte, source string, allowedAnnotations []string) ([]Violat
 	return violations, nil
 }
 
-func validateAnnotation(file string, line int, key, value, kind string, allowedAnnotations map[string]bool) []Violation {
+func validateAnnotation(file string, line int, key, value, kind, name string, allowedAnnotations map[string]bool) []Violation {
 	var violations []Violation
 
 	newViolation := func(sev rules.Severity, ruleID, msg string) Violation {
 		return Violation{
-			File: file, Line: line, Annotation: key, Kind: kind,
+			File: file, Line: line, Annotation: key, Kind: kind, Name: name,
 			Severity: sev, Rule: ruleID, Message: msg,
 		}
 	}
@@ -329,7 +331,7 @@ func lintBundleAnnotations(node *yaml.Node, source string, allowSet map[string]b
 			continue
 		}
 		line := annotationLines[key]
-		v := validateAnnotation(source, line, key, value, rules.KindBundleAnnotations, allowSet)
+		v := validateAnnotation(source, line, key, value, rules.KindBundleAnnotations, "", allowSet)
 		violations = append(violations, v...)
 	}
 

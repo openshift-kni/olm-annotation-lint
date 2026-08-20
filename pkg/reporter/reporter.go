@@ -60,10 +60,14 @@ func Report(w io.Writer, violations []linter.Violation, format Format, version s
 func reportText(w io.Writer, violations []linter.Violation) {
 	for _, v := range violations {
 		severity := strings.ToUpper(v.Severity.String())
+		target := v.Kind
+		if v.Name != "" {
+			target = fmt.Sprintf("%s %q", v.Kind, v.Name)
+		}
 		if v.Line > 0 {
-			_, _ = fmt.Fprintf(w, "%s:%d: [%s] %s: %s (on %s)\n", v.File, v.Line, severity, v.Annotation, v.Message, v.Kind)
+			_, _ = fmt.Fprintf(w, "%s:%d: [%s] %s: %s (on %s)\n", v.File, v.Line, severity, v.Annotation, v.Message, target)
 		} else {
-			_, _ = fmt.Fprintf(w, "%s: [%s] %s: %s (on %s)\n", v.File, severity, v.Annotation, v.Message, v.Kind)
+			_, _ = fmt.Fprintf(w, "%s: [%s] %s: %s (on %s)\n", v.File, severity, v.Annotation, v.Message, target)
 		}
 	}
 }
@@ -73,6 +77,7 @@ type jsonViolation struct {
 	Line       int    `json:"line,omitempty"`
 	Annotation string `json:"annotation"`
 	Kind       string `json:"kind"`
+	Name       string `json:"name,omitempty"`
 	Severity   string `json:"severity"`
 	Rule       string `json:"rule"`
 	Message    string `json:"message"`
@@ -99,6 +104,7 @@ func reportJSON(w io.Writer, violations []linter.Violation, ver string) {
 			Line:       v.Line,
 			Annotation: v.Annotation,
 			Kind:       v.Kind,
+			Name:       v.Name,
 			Severity:   v.Severity.String(),
 			Rule:       v.Rule,
 			Message:    v.Message,

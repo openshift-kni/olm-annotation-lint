@@ -45,19 +45,8 @@ jobs:
           go-version-file: go.mod
       - name: Build linter
         run: go build -o olm-annotation-lint .
-      - name: Test valid YAMLs pass
-        run: |
-          ./olm-annotation-lint --path testdata/valid
-          echo "PASS: valid YAMLs accepted"
-      - name: Test invalid YAMLs each fail (strict mode)
-        run: |
-          for f in testdata/invalid/*.yaml; do
-            if ./olm-annotation-lint --path "$f" --strict > /dev/null 2>&1; then
-              echo "FAIL: $f should have been rejected"
-              exit 1
-            fi
-            echo "PASS: $f correctly rejected"
-          done
+      - name: Run scenario tests
+        run: bash hack/scenario-test.sh
 
   docker-build:
     runs-on: ubuntu-latest
@@ -66,6 +55,29 @@ jobs:
       - name: Build Docker image
         run: docker build -t olm-annotation-lint .
 
+  # Tests the PR-built image against testdata. action-test uses the published
+  # quay.io v1 image and cannot prove unreleased rules or flags.
+  image-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build image from PR
+        run: docker build -t olm-annotation-lint:pr .
+      - name: Valid testdata must pass
+        run: docker run --rm -v "$PWD:/workspace:ro" olm-annotation-lint:pr --path /workspace/testdata/valid
+      - name: Invalid testdata must fail
+        run: |
+          if docker run --rm -v "$PWD:/workspace:ro" olm-annotation-lint:pr --path /workspace/testdata/invalid; then
+            echo "FAIL: image should have failed on testdata/invalid"
+            exit 1
+          fi
+          echo "PASS: image rejected testdata/invalid"
+
+  # Compatibility check against the last released Action image.
+  # testdata/valid must remain acceptable to quay.io/bapalm/olm-annotation-lint:v1.
+  # Do not add fixtures that only the PR binary would accept (for example
+  # unknown annotations silenced by # olm-annotation-lint: ignore). Cover those
+  # with scenario-test and image-test instead.
   action-test:
     runs-on: ubuntu-latest
     steps:

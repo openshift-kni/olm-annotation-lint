@@ -39,6 +39,11 @@ func TestUnknownAnnotation(t *testing.T) {
 	if rule := findViolationRule(violations, "olm.operatorframework.io/bundle-install-timeout"); rule != rules.RuleUnknownAnnotation {
 		t.Errorf("expected rule 'unknown-annotation', got %q", rule)
 	}
+	for _, v := range violations {
+		if v.Annotation == "olm.operatorframework.io/bundle-install-timeout" && v.Name != "cert-manager-operator" {
+			t.Errorf("expected resource name cert-manager-operator, got %q", v.Name)
+		}
+	}
 }
 
 func TestWrongResourceType(t *testing.T) {
@@ -104,7 +109,7 @@ func TestBadTemplateValue(t *testing.T) {
 }
 
 func TestUnknownTemplateVariable(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/unknown_template_variable.yaml"},
 	})
 	if err != nil {

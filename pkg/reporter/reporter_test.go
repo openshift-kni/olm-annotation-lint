@@ -49,6 +49,31 @@ func TestReportText(t *testing.T) {
 	}
 }
 
+func TestReportTextResourceName(t *testing.T) {
+	violations := []linter.Violation{
+		{
+			File:       "test.yaml",
+			Line:       5,
+			Annotation: "olm.fake",
+			Kind:       "ClusterServiceVersion",
+			Name:       "test-operator.v2.0.0",
+			Severity:   rules.SeverityError,
+			Message:    "unknown OLM annotation",
+		},
+	}
+	var buf bytes.Buffer
+	reporter.Report(&buf, violations, reporter.FormatText, "1.0.0")
+	if !strings.Contains(buf.String(), `(on ClusterServiceVersion "test-operator.v2.0.0")`) {
+		t.Errorf("expected resource name in text output, got: %s", buf.String())
+	}
+
+	buf.Reset()
+	reporter.Report(&buf, violations, reporter.FormatJSON, "1.0.0")
+	if !strings.Contains(buf.String(), `"name": "test-operator.v2.0.0"`) {
+		t.Errorf("expected name field in JSON output, got: %s", buf.String())
+	}
+}
+
 func TestReportTextSuggestion(t *testing.T) {
 	violations := []linter.Violation{
 		{

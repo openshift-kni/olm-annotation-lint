@@ -5,13 +5,17 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 IMAGE ?= quay.io/bapalm/olm-annotation-lint
 TAG ?= latest
 
-.PHONY: build test lint clean scenario-test docker-build docker-lint
+.PHONY: build test lint coverage clean scenario-test docker-build docker-lint
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) .
 
 test:
 	go test ./... -v
+
+coverage:
+	go test -race ./... -coverprofile=coverage.out
+	go tool cover -func=coverage.out | grep ^total
 
 lint:
 	golangci-lint run ./...

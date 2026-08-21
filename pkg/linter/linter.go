@@ -176,16 +176,20 @@ func LintData(data []byte, source string, allowedAnnotations []string) ([]Violat
 		}
 
 		annotationLines := extractAnnotationLines(&node)
+		ignores := extractIgnoreDirectives(findMappingValue(findMappingValue(&node, "metadata"), "annotations"))
 
 		for key, value := range resource.Metadata.Annotations {
 			if !rules.IsOLMAnnotation(key) {
+				continue
+			}
+			if ignores.skipAll(key) {
 				continue
 			}
 
 			line := annotationLines[key]
 
 			v := validateAnnotation(source, line, key, value, resource.Kind, allowSet)
-			violations = append(violations, v...)
+			violations = append(violations, ignores.filter(key, v)...)
 		}
 	}
 
@@ -284,6 +288,79 @@ func annotationLinesFromNode(node *yaml.Node) map[string]int {
 	return lines
 }
 
+const ignoreDirectivePrefix = "olm-annotation-lint: ignore"
+
+type ignoreSpec struct {
+	all   bool
+	rules map[string]bool
+}
+
+type ignoreSet map[string]ignoreSpec
+
+func (s ignoreSet) skipAll(key string) bool {
+	spec, ok := s[key]
+	return ok && spec.all
+}
+
+func (s ignoreSet) filter(key string, vs []Violation) []Violation {
+	spec, ok := s[key]
+	if !ok || spec.all {
+		return vs
+	}
+	var filtered []Violation
+	for _, v := range vs {
+		if spec.rules[v.Rule] {
+			continue
+		}
+		filtered = append(filtered, v)
+	}
+	return filtered
+}
+
+func extractIgnoreDirectives(node *yaml.Node) ignoreSet {
+	ignores := ignoreSet{}
+	if node == nil || node.Kind != yaml.MappingNode {
+		return ignores
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		keyNode, valNode := node.Content[i], node.Content[i+1]
+		spec, ok := parseIgnoreComments(keyNode.HeadComment, keyNode.LineComment, keyNode.FootComment, valNode.HeadComment, valNode.LineComment, valNode.FootComment)
+		if ok {
+			ignores[keyNode.Value] = spec
+		}
+	}
+	return ignores
+}
+
+func parseIgnoreComments(comments ...string) (ignoreSpec, bool) {
+	var spec ignoreSpec
+	found := false
+	for _, comment := range comments {
+		for _, line := range strings.Split(comment, "\n") {
+			line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "#"))
+			if !strings.HasPrefix(line, ignoreDirectivePrefix) {
+				continue
+			}
+			found = true
+			rest := strings.TrimSpace(strings.TrimPrefix(line, ignoreDirectivePrefix))
+			if rest == "" {
+				spec.all = true
+				continue
+			}
+			if spec.rules == nil {
+				spec.rules = map[string]bool{}
+			}
+			for _, ruleID := range strings.Fields(rest) {
+				spec.rules[strings.Trim(ruleID, ",")] = true
+			}
+		}
+	}
+	if spec.all {
+		spec.rules = nil
+	}
+	return spec, found
+}
+
 func findMappingValue(node *yaml.Node, key string) *yaml.Node {
 	if node == nil {
 		return nil
@@ -321,16 +398,21 @@ func lintBundleAnnotations(node *yaml.Node, source string, allowSet map[string]b
 		return nil
 	}
 
-	annotationLines := annotationLinesFromNode(findMappingValue(node, "annotations"))
+	annNode := findMappingValue(node, "annotations")
+	annotationLines := annotationLinesFromNode(annNode)
+	ignores := extractIgnoreDirectives(annNode)
 	var violations []Violation
 
 	for key, value := range bundle.Annotations {
 		if !rules.IsOLMAnnotation(key) {
 			continue
 		}
+		if ignores.skipAll(key) {
+			continue
+		}
 		line := annotationLines[key]
 		v := validateAnnotation(source, line, key, value, rules.KindBundleAnnotations, allowSet)
-		violations = append(violations, v...)
+		violations = append(violations, ignores.filter(key, v)...)
 	}
 
 	for _, req := range rules.RequiredBundleAnnotations {

@@ -867,6 +867,99 @@ func TestBundleMissingAnnotationsLintData(t *testing.T) {
 	}
 }
 
+func TestInlineIgnoreDirective(t *testing.T) {
+	t.Run("head comment ignores unknown annotation", func(t *testing.T) {
+		data := []byte(`apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  annotations:
+    # olm-annotation-lint: ignore
+    olm.operatorframework.io/bundle-install-timeout: "10m"
+  name: test
+`)
+		violations, err := linter.LintData(data, "<test>", nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "") {
+			t.Error("expected ignored annotation to produce no violation")
+		}
+	})
+
+	t.Run("line comment ignores unknown annotation", func(t *testing.T) {
+		data := []byte(`apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  annotations:
+    olm.operatorframework.io/bundle-install-timeout: "10m" # olm-annotation-lint: ignore
+  name: test
+`)
+		violations, err := linter.LintData(data, "<test>", nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "") {
+			t.Error("expected line-comment ignored annotation to produce no violation")
+		}
+	})
+
+	t.Run("non-ignored unknown annotation still reported", func(t *testing.T) {
+		violations, err := linter.Run(linter.Options{
+			Paths: []string{"../../testdata/invalid/ignore_directive_mixed.yaml"},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "") {
+			t.Error("expected ignored annotation to produce no violation")
+		}
+		if !findViolation(violations, "olm.operatorframework.io/not-ignored", "unknown OLM annotation") {
+			t.Error("expected violation for non-ignored unknown annotation")
+		}
+	})
+
+	t.Run("specific rule ignore leaves other rules", func(t *testing.T) {
+		data := []byte(`apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: test
+  annotations:
+    # olm-annotation-lint: ignore controller-managed
+    olm.operatorGroup: og-test
+    olm.does-not-exist: "true"
+`)
+		violations, err := linter.LintData(data, "<test>", nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if findViolation(violations, "olm.operatorGroup", "") {
+			t.Error("expected controller-managed violation to be ignored")
+		}
+		if !findViolation(violations, "olm.does-not-exist", "unknown OLM annotation") {
+			t.Error("expected unknown annotation without matching ignore to be reported")
+		}
+	})
+
+	t.Run("bundle annotations ignore", func(t *testing.T) {
+		data := []byte(`annotations:
+  operators.operatorframework.io.bundle.mediatype.v1: registry+v1
+  operators.operatorframework.io.bundle.manifests.v1: manifests/
+  operators.operatorframework.io.bundle.metadata.v1: metadata/
+  operators.operatorframework.io.bundle.package.v1: etcd
+  operators.operatorframework.io.bundle.channels.v1: alpha
+  # olm-annotation-lint: ignore
+  operators.operatorframework.io.bundle.nonexistent.v1: foo
+`)
+		violations, err := linter.LintData(data, "<test>", nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if findViolation(violations, "operators.operatorframework.io.bundle.nonexistent.v1", "") {
+			t.Error("expected ignored bundle annotation to produce no violation")
+		}
+	})
+}
+
 func TestBundleCompleteAnnotationsNoWarnings(t *testing.T) {
 	violations, err := linter.Run(linter.Options{
 		Paths: []string{"../../testdata/valid/bundle_annotations.yaml"},

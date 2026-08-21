@@ -21,7 +21,7 @@ All flags support both long and short forms:
 |------|-------|-------------|
 | `--path` | `-p` | Path or comma-separated paths to scan |
 | `--exclude` | `-e` | Comma-separated directory names or file globs to skip |
-| `--allow` | `-a` | Comma-separated annotation keys to allow |
+| `--allow` | `-a` | Comma-separated annotation keys to allow. A trailing `*` matches a prefix (for example `olm.*`). |
 | `--strict` | `-s` | Treat warnings as errors |
 | `--format` | `-f` | Output format: text, json, github, junit |
 | `--config` | `-c` | Path to config file |

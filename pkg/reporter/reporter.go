@@ -65,6 +65,9 @@ func reportText(w io.Writer, violations []linter.Violation) {
 		} else {
 			_, _ = fmt.Fprintf(w, "%s: [%s] %s: %s (on %s)\n", v.File, severity, v.Annotation, v.Message, v.Kind)
 		}
+		if v.Suggestion != "" {
+			_, _ = fmt.Fprintf(w, "  Suggestion: %s\n", v.Suggestion)
+		}
 	}
 }
 
@@ -76,6 +79,7 @@ type jsonViolation struct {
 	Severity   string `json:"severity"`
 	Rule       string `json:"rule"`
 	Message    string `json:"message"`
+	Suggestion string `json:"suggestion,omitempty"`
 }
 
 type jsonSummary struct {
@@ -102,6 +106,7 @@ func reportJSON(w io.Writer, violations []linter.Violation, ver string) {
 			Severity:   v.Severity.String(),
 			Rule:       v.Rule,
 			Message:    v.Message,
+			Suggestion: v.Suggestion,
 		})
 		switch v.Severity {
 		case rules.SeverityError:

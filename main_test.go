@@ -129,6 +129,26 @@ func TestLoadConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("config with rules", func(t *testing.T) {
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "config.yaml")
+		content := "rules:\n  olm.operatorGroup:\n    enabled: false\n  unknown-annotation:\n    severity: warning\n"
+		if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := loadConfig(cfgPath)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		rc, ok := cfg.Rules["olm.operatorGroup"]
+		if !ok || rc.Enabled == nil || *rc.Enabled {
+			t.Errorf("expected olm.operatorGroup enabled=false, got %+v", rc)
+		}
+		if cfg.Rules["unknown-annotation"].Severity != "warning" {
+			t.Errorf("expected unknown-annotation severity warning, got %q", cfg.Rules["unknown-annotation"].Severity)
+		}
+	})
+
 	t.Run("invalid YAML", func(t *testing.T) {
 		dir := t.TempDir()
 		cfgPath := filepath.Join(dir, "config.yaml")
@@ -231,6 +251,39 @@ func TestRunListRules(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "User-settable annotations") {
 		t.Error("expected 'User-settable annotations' in --list-rules output")
+	}
+}
+
+func TestRunInvalidRuleSeverity(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	content := "path: testdata/valid\nrules:\n  olm.skipRange:\n    severity: banana\n"
+	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--config", cfgPath}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit 2 for invalid severity, got %d: %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "severity") {
+		t.Errorf("expected severity error, got: %s", stderr.String())
+	}
+}
+
+func TestRunTimeoutFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--timeout", "1h", "--path", "testdata/valid"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0 with long timeout, got %d: %s", code, stderr.String())
+	}
+}
+
+func TestRunTimeoutFlagInvalid(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--timeout", "not-a-duration"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit 2 for invalid timeout, got %d", code)
 	}
 }
 

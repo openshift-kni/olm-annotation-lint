@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -17,6 +18,31 @@ import (
 )
 
 var version = "dev"
+
+func displayVersion(ldflag string, info *debug.BuildInfo, ok bool) string {
+	if ldflag != "" && ldflag != "dev" {
+		return ldflag
+	}
+	if !ok || info == nil {
+		if ldflag == "" {
+			return "dev"
+		}
+		return ldflag
+	}
+	v := info.Main.Version
+	if v == "" || v == "(devel)" {
+		if ldflag == "" {
+			return "dev"
+		}
+		return ldflag
+	}
+	return v
+}
+
+func currentVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	return displayVersion(version, info, ok)
+}
 
 func splitAndTrim(s string) []string {
 	parts := strings.Split(s, ",")
@@ -139,7 +165,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if showVersion {
-		_, _ = fmt.Fprintln(stdout, version)
+		_, _ = fmt.Fprintln(stdout, currentVersion())
 		return 0
 	}
 
@@ -222,7 +248,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if len(violations) > 0 {
-		reporter.Report(stdout, violations, outputFormat, version)
+		reporter.Report(stdout, violations, outputFormat, currentVersion())
 	}
 
 	var errorCount, warningCount int

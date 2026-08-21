@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -240,6 +241,32 @@ func TestRunVersion(t *testing.T) {
 	}
 	if strings.TrimSpace(stdout.String()) == "" {
 		t.Error("expected version output, got empty string")
+	}
+}
+
+func TestDisplayVersion(t *testing.T) {
+	info := &debug.BuildInfo{Main: debug.Module{Version: "v1.2.3"}}
+	tests := []struct {
+		name   string
+		ldflag string
+		info   *debug.BuildInfo
+		ok     bool
+		want   string
+	}{
+		{"ldflags win", "v9.9.9", info, true, "v9.9.9"},
+		{"go install fallback", "dev", info, true, "v1.2.3"},
+		{"empty ldflag fallback", "", info, true, "v1.2.3"},
+		{"devel keeps ldflag", "dev", &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, true, "dev"},
+		{"missing build info", "dev", nil, false, "dev"},
+		{"empty module version", "dev", &debug.BuildInfo{}, true, "dev"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := displayVersion(tt.ldflag, tt.info, tt.ok)
+			if got != tt.want {
+				t.Errorf("displayVersion(%q) = %q, want %q", tt.ldflag, got, tt.want)
+			}
+		})
 	}
 }
 

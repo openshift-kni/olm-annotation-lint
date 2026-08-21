@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/openshift-kni/olm-annotation-lint/pkg/linter"
 	"github.com/openshift-kni/olm-annotation-lint/pkg/reporter"
@@ -107,6 +109,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		strict      bool
 		format      string
 		configPath  string
+		timeout     time.Duration
 		showVersion bool
 		listRules   bool
 	)
@@ -125,6 +128,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&format, "f", "text", "Output format: text, json, github, junit, sarif (shorthand)")
 	fs.StringVar(&configPath, "config", "", "Path to config file (default: .olm-lint.yaml in current directory)")
 	fs.StringVar(&configPath, "c", "", "Path to config file (shorthand)")
+	fs.DurationVar(&timeout, "timeout", 0, "Maximum duration (e.g. 30s, 5m); 0 means no timeout")
 	fs.BoolVar(&showVersion, "version", false, "Print version and exit")
 	fs.BoolVar(&showVersion, "v", false, "Print version and exit (shorthand)")
 	fs.BoolVar(&listRules, "list-rules", false, "List all known OLM annotations and exit")
@@ -193,7 +197,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	violations, err := linter.Run(linter.Options{
+	ctx := context.Background()
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	violations, err := linter.Run(ctx, linter.Options{
 		Paths:              paths,
 		Exclude:            excludePaths,
 		AllowedAnnotations: allowedAnnotations,

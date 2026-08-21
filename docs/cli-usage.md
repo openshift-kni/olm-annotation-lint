@@ -25,6 +25,7 @@ All flags support both long and short forms:
 | `--strict` | `-s` | Treat warnings as errors |
 | `--format` | `-f` | Output format: text, json, github, junit |
 | `--config` | `-c` | Path to config file |
+| `--timeout` | | Maximum duration (e.g. `30s`, `5m`); 0 means no timeout |
 | `--version` | `-v` | Print version and exit |
 | `--list-rules` | `-l` | List all known OLM annotations and exit |
 
@@ -59,6 +60,21 @@ Set `enabled: false` to suppress matching violations, or `severity` to
 
 The config file is auto-discovered in the current directory. Use `--config` to specify a
 custom path. CLI flags always take precedence over config file values.
+
+## Inline ignore directives
+
+Suppress violations for a specific annotation with a YAML comment:
+
+```yaml
+metadata:
+  annotations:
+    # olm-annotation-lint: ignore
+    olm.custom.annotation: "value"
+    olm.operatorGroup: og-test  # olm-annotation-lint: ignore controller-managed
+```
+
+`# olm-annotation-lint: ignore` skips all rules for that key. Add one or more
+rule IDs (from JSON/JUnit/SARIF output) to ignore only those rules.
 
 ## Exit Codes
 

@@ -1,0 +1,8 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: etcd.v0.9.4
+  annotations:
+    olm.skipRange: ">=0.9.0 <0.9.4"
+spec:
+  displayName: etcd

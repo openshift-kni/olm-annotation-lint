@@ -1104,6 +1104,20 @@ func TestBundleCompleteAnnotationsNoWarnings(t *testing.T) {
 	}
 }
 
+func TestBundlePackageMatchesCSV(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths: []string{"../../testdata/valid/bundles/matching"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, v := range violations {
+		if v.Rule == rules.RuleBundlePackage {
+			t.Errorf("unexpected package mismatch: %s", v.Message)
+		}
+	}
+}
+
 func TestDuplicateAnnotationKeys(t *testing.T) {
 	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/duplicate-keys.yaml"},
@@ -1164,6 +1178,27 @@ func TestLintMixedBundleAnnotations(t *testing.T) {
 		if findViolation(violations, key, "") {
 			t.Errorf("valid annotation %s should not be flagged", key)
 		}
+	}
+}
+
+func TestBundlePackageMismatchCSV(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths: []string{"../../testdata/invalid/bundles/mismatch"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, v := range violations {
+		if v.Rule == rules.RuleBundlePackage {
+			found = true
+			if !strings.Contains(v.Message, "etcd") || !strings.Contains(v.Message, "memcached.v0.1.0") {
+				t.Errorf("expected package etcd vs memcached.v0.1.0, got %q", v.Message)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected bundle-package-mismatch warning")
 	}
 }
 

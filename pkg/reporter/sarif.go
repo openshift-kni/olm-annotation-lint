@@ -78,6 +78,7 @@ var ruleDescriptions = map[string]string{
 	rules.RuleWrongResourceKind: "Annotation on wrong resource kind",
 	rules.RuleInvalidValue:      "Invalid annotation value",
 	rules.RuleMissingAnnotation: "Required bundle annotation missing",
+	rules.RuleBundlePackage:     "Bundle package name does not match CSV",
 	rules.RuleDuplicateKey:      "Duplicate annotation key",
 }
 

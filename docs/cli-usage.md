@@ -89,7 +89,7 @@ rule IDs (from JSON/JUnit/SARIF output) to ignore only those rules.
 - `text` (default) — human-readable with file:line references
 - `json` — structured report with summary counts and violation details
 - `github` — GitHub Actions annotation format
-- `junit` — JUnit XML for CI dashboards
+- `junit` — JUnit XML for CI dashboards (errors are failures; warnings are `system-err`)
 - `sarif` — SARIF 2.1.0 for the GitHub Security tab
 
 ### JSON Format

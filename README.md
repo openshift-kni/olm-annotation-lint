@@ -48,6 +48,7 @@ chmod +x olm-annotation-lint
 ```bash
 make build          # Build binary
 make test           # Run unit tests
+make coverage       # Run tests with coverage (mirrors CI)
 make lint           # Run linter
 make docker-build   # Build container image
 make docker-lint    # Lint via container

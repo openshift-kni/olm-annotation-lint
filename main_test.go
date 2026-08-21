@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -129,6 +130,26 @@ func TestLoadConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("config with rules", func(t *testing.T) {
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "config.yaml")
+		content := "rules:\n  olm.operatorGroup:\n    enabled: false\n  unknown-annotation:\n    severity: warning\n"
+		if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := loadConfig(cfgPath)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		rc, ok := cfg.Rules["olm.operatorGroup"]
+		if !ok || rc.Enabled == nil || *rc.Enabled {
+			t.Errorf("expected olm.operatorGroup enabled=false, got %+v", rc)
+		}
+		if cfg.Rules["unknown-annotation"].Severity != "warning" {
+			t.Errorf("expected unknown-annotation severity warning, got %q", cfg.Rules["unknown-annotation"].Severity)
+		}
+	})
+
 	t.Run("invalid YAML", func(t *testing.T) {
 		dir := t.TempDir()
 		cfgPath := filepath.Join(dir, "config.yaml")
@@ -223,6 +244,32 @@ func TestRunVersion(t *testing.T) {
 	}
 }
 
+func TestDisplayVersion(t *testing.T) {
+	info := &debug.BuildInfo{Main: debug.Module{Version: "v1.2.3"}}
+	tests := []struct {
+		name   string
+		ldflag string
+		info   *debug.BuildInfo
+		ok     bool
+		want   string
+	}{
+		{"ldflags win", "v9.9.9", info, true, "v9.9.9"},
+		{"go install fallback", "dev", info, true, "v1.2.3"},
+		{"empty ldflag fallback", "", info, true, "v1.2.3"},
+		{"devel keeps ldflag", "dev", &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, true, "dev"},
+		{"missing build info", "dev", nil, false, "dev"},
+		{"empty module version", "dev", &debug.BuildInfo{}, true, "dev"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := displayVersion(tt.ldflag, tt.info, tt.ok)
+			if got != tt.want {
+				t.Errorf("displayVersion(%q) = %q, want %q", tt.ldflag, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRunListRules(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"--list-rules"}, &stdout, &stderr)
@@ -231,6 +278,70 @@ func TestRunListRules(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "User-settable annotations") {
 		t.Error("expected 'User-settable annotations' in --list-rules output")
+	}
+}
+
+func TestRunOutputFlag(t *testing.T) {
+	dir := t.TempDir()
+	outPath := filepath.Join(dir, "results.json")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--path", "testdata/invalid/unknown_olm_annotation.yaml", "--format", "json", "--output", outPath}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("expected exit 1, got %d: %s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), `"violations"`) {
+		t.Errorf("JSON should be written to the file, not stdout: %s", stdout.String())
+	}
+	data, err := os.ReadFile(outPath) //nolint:gosec // test-controlled temp file
+	if err != nil {
+		t.Fatalf("expected output file: %v", err)
+	}
+	if !strings.Contains(string(data), `"violations"`) {
+		t.Errorf("expected JSON report in output file, got: %s", data)
+	}
+	if !strings.Contains(stderr.String(), "error(s)") {
+		t.Errorf("expected summary on stderr, got: %s", stderr.String())
+	}
+}
+
+func TestRunOutputFlagUnwritable(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--path", "testdata/valid", "--output", "/no/such/dir/results.json"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit 2 for unwritable output, got %d", code)
+	}
+}
+
+func TestRunInvalidRuleSeverity(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	content := "path: testdata/valid\nrules:\n  olm.skipRange:\n    severity: banana\n"
+	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--config", cfgPath}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit 2 for invalid severity, got %d: %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "severity") {
+		t.Errorf("expected severity error, got: %s", stderr.String())
+	}
+}
+
+func TestRunTimeoutFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--timeout", "1h", "--path", "testdata/valid"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0 with long timeout, got %d: %s", code, stderr.String())
+	}
+}
+
+func TestRunTimeoutFlagInvalid(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--timeout", "not-a-duration"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit 2 for invalid timeout, got %d", code)
 	}
 }
 

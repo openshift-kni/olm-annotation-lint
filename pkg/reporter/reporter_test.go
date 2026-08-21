@@ -49,6 +49,58 @@ func TestReportText(t *testing.T) {
 	}
 }
 
+func TestReportTextResourceName(t *testing.T) {
+	violations := []linter.Violation{
+		{
+			File:       "test.yaml",
+			Line:       5,
+			Annotation: "olm.fake",
+			Kind:       "ClusterServiceVersion",
+			Name:       "test-operator.v2.0.0",
+			Severity:   rules.SeverityError,
+			Message:    "unknown OLM annotation",
+		},
+	}
+	var buf bytes.Buffer
+	reporter.Report(&buf, violations, reporter.FormatText, "1.0.0")
+	if !strings.Contains(buf.String(), `(on ClusterServiceVersion "test-operator.v2.0.0")`) {
+		t.Errorf("expected resource name in text output, got: %s", buf.String())
+	}
+
+	buf.Reset()
+	reporter.Report(&buf, violations, reporter.FormatJSON, "1.0.0")
+	if !strings.Contains(buf.String(), `"name": "test-operator.v2.0.0"`) {
+		t.Errorf("expected name field in JSON output, got: %s", buf.String())
+	}
+}
+
+func TestReportTextSuggestion(t *testing.T) {
+	violations := []linter.Violation{
+		{
+			File:       "test.yaml",
+			Line:       5,
+			Annotation: "OLM.providedAPIs",
+			Kind:       "OperatorGroup",
+			Severity:   rules.SeverityError,
+			Rule:       rules.RuleCaseMismatch,
+			Message:    `annotation case mismatch: use "olm.providedAPIs" instead of "OLM.providedAPIs"`,
+			Suggestion: "olm.providedAPIs",
+		},
+	}
+	var buf bytes.Buffer
+	reporter.Report(&buf, violations, reporter.FormatText, "1.0.0")
+	output := buf.String()
+	if !strings.Contains(output, "Suggestion: olm.providedAPIs") {
+		t.Errorf("expected suggestion line in text output, got: %s", output)
+	}
+
+	buf.Reset()
+	reporter.Report(&buf, violations, reporter.FormatJSON, "1.0.0")
+	if !strings.Contains(buf.String(), `"suggestion": "olm.providedAPIs"`) {
+		t.Errorf("expected suggestion field in JSON output, got: %s", buf.String())
+	}
+}
+
 func TestReportJSON(t *testing.T) {
 	var buf bytes.Buffer
 	reporter.Report(&buf, testViolations, reporter.FormatJSON, "1.0.0")
@@ -262,8 +314,8 @@ func TestReportJUnit(t *testing.T) {
 	if suite.Tests != 2 {
 		t.Errorf("expected 2 tests, got %d", suite.Tests)
 	}
-	if suite.Failures != 2 {
-		t.Errorf("expected 2 failures, got %d", suite.Failures)
+	if suite.Failures != 1 {
+		t.Errorf("expected 1 failure, got %d", suite.Failures)
 	}
 	if len(suite.Cases) != 2 {
 		t.Fatalf("expected 2 test cases, got %d", len(suite.Cases))
@@ -276,6 +328,9 @@ func TestReportJUnit(t *testing.T) {
 	}
 	if suite.Cases[0].Failure.Type != rules.RuleUnknownAnnotation {
 		t.Errorf("expected failure type %q, got %s", rules.RuleUnknownAnnotation, suite.Cases[0].Failure.Type)
+	}
+	if suite.Cases[1].Failure != nil {
+		t.Error("warning violation should not have a failure element")
 	}
 }
 
@@ -298,6 +353,45 @@ func TestReportJUnitEmpty(t *testing.T) {
 	}
 	if result.TestSuites[0].Failures != 0 {
 		t.Errorf("expected 0 failures, got %d", result.TestSuites[0].Failures)
+	}
+}
+
+func TestReportJUnitWarningNotFailure(t *testing.T) {
+	warnings := []linter.Violation{
+		{
+			File:       "test.yaml",
+			Line:       10,
+			Annotation: "olm.operatorGroup",
+			Kind:       "ClusterServiceVersion",
+			Severity:   rules.SeverityWarning,
+			Rule:       rules.RuleControllerManaged,
+			Message:    "controller-managed annotation",
+		},
+	}
+	var buf bytes.Buffer
+	reporter.Report(&buf, warnings, reporter.FormatJUnit, "1.0.0")
+
+	if !strings.Contains(buf.String(), "<system-err>") {
+		t.Errorf("expected system-err for warning, got: %s", buf.String())
+	}
+	if strings.Contains(buf.String(), "<failure") {
+		t.Errorf("warning should not include a failure element, got: %s", buf.String())
+	}
+
+	var result struct {
+		TestSuites []struct {
+			Tests    int `xml:"tests,attr"`
+			Failures int `xml:"failures,attr"`
+		} `xml:"testsuite"`
+	}
+	if err := xml.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JUnit XML: %v", err)
+	}
+	if result.TestSuites[0].Tests != 1 {
+		t.Errorf("expected 1 test, got %d", result.TestSuites[0].Tests)
+	}
+	if result.TestSuites[0].Failures != 0 {
+		t.Errorf("expected 0 failures for warnings, got %d", result.TestSuites[0].Failures)
 	}
 }
 

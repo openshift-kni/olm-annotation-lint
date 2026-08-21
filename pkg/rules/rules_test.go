@@ -367,6 +367,15 @@ func TestPrintRules(t *testing.T) {
 	if !strings.Contains(output, "(bundle mediatype)") {
 		t.Error("expected bundle mediatype format in output")
 	}
+	if !strings.Contains(output, "Override the default bundle unpack job deadline") {
+		t.Error("expected user-settable description in output")
+	}
+	if !strings.Contains(output, "Identifies which OperatorGroup owns this CSV") {
+		t.Error("expected controller-managed description in output")
+	}
+	if !strings.Contains(output, "Bundle format type") {
+		t.Error("expected bundle annotation description in output")
+	}
 }
 
 func TestParseSeverity(t *testing.T) {

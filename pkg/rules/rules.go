@@ -31,6 +31,19 @@ func (s Severity) String() string {
 	}
 }
 
+func ParseSeverity(s string) (Severity, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "error":
+		return SeverityError, nil
+	case "warning", "warn":
+		return SeverityWarning, nil
+	case "info", "notice":
+		return SeverityInfo, nil
+	default:
+		return 0, fmt.Errorf("unknown severity %q (supported: error, warning, info)", s)
+	}
+}
+
 const (
 	RuleUnknownAnnotation = "unknown-annotation"
 	RuleCaseMismatch      = "case-mismatch"
@@ -39,6 +52,7 @@ const (
 	RuleWrongResourceKind = "wrong-resource-kind"
 	RuleInvalidValue      = "invalid-value"
 	RuleMissingAnnotation = "missing-annotation"
+	RuleDuplicateKey      = "duplicate-key"
 )
 
 var RequiredBundleAnnotations []string
@@ -340,20 +354,32 @@ func ValidateJSON(value string) bool {
 	return json.Valid([]byte(value))
 }
 
+var allowedTemplateVars = map[string]bool{
+	"kube_major_version": true,
+	"kube_minor_version": true,
+	"kube_patch_version": true,
+}
+
 func ValidateTemplate(value string) bool {
 	depth := 0
-	for _, ch := range value {
+	varNameStart := -1
+	for i, ch := range value {
 		switch ch {
 		case '{':
 			depth++
 			if depth > 1 {
 				return false
 			}
+			varNameStart = i + 1
 		case '}':
 			depth--
 			if depth < 0 {
 				return false
 			}
+			if varNameStart < 0 || !allowedTemplateVars[value[varNameStart:i]] {
+				return false
+			}
+			varNameStart = -1
 		}
 	}
 	return depth == 0

@@ -633,6 +633,37 @@ func TestExcludeMultiplePatterns(t *testing.T) {
 	}
 }
 
+func TestExcludeExactFilename(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths:   []string{"../../testdata/invalid"},
+		Exclude: []string{"unknown_olm_annotation.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, v := range violations {
+		if strings.Contains(v.File, "unknown_olm_annotation.yaml") {
+			t.Errorf("excluded filename should not produce violations, got %+v", v)
+		}
+	}
+}
+
+func TestExcludeFileGlob(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths:   []string{"../../testdata/invalid"},
+		Exclude: []string{"*.generated.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if findViolation(violations, "olm.generated-only-annotation", "") {
+		t.Error("files matching *.generated.yaml should be skipped")
+	}
+	if !findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "unknown OLM annotation") {
+		t.Error("non-matching invalid files should still be reported")
+	}
+}
+
 func TestMultiplePathsValid(t *testing.T) {
 	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{

@@ -117,16 +117,18 @@ func lintDirectory(ctx context.Context, dir string, exclude []string, allowedAnn
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if d.IsDir() {
-			for _, ex := range exclude {
-				matched, err := filepath.Match(ex, d.Name())
-				if err != nil {
-					return fmt.Errorf("invalid exclude pattern %q: %w", ex, err)
-				}
-				if matched {
-					return filepath.SkipDir
-				}
+
+		skip, err := matchesExclude(d.Name(), exclude)
+		if err != nil {
+			return err
+		}
+		if skip {
+			if d.IsDir() {
+				return filepath.SkipDir
 			}
+			return nil
+		}
+		if d.IsDir() {
 			return nil
 		}
 
@@ -144,6 +146,19 @@ func lintDirectory(ctx context.Context, dir string, exclude []string, allowedAnn
 	})
 
 	return violations, err
+}
+
+func matchesExclude(name string, exclude []string) (bool, error) {
+	for _, ex := range exclude {
+		matched, err := filepath.Match(ex, name)
+		if err != nil {
+			return false, fmt.Errorf("invalid exclude pattern %q: %w", ex, err)
+		}
+		if matched {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func lintFile(ctx context.Context, path string, allowedAnnotations []string) ([]Violation, error) {

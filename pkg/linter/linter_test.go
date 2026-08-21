@@ -895,7 +895,7 @@ metadata:
     olm.operatorframework.io/bundle-install-timeout: "10m"
   name: test
 `)
-		violations, err := linter.LintData(data, "<test>", nil)
+		violations, err := linter.LintData(context.Background(), data, "<test>", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -912,7 +912,7 @@ metadata:
     olm.operatorframework.io/bundle-install-timeout: "10m" # olm-annotation-lint: ignore
   name: test
 `)
-		violations, err := linter.LintData(data, "<test>", nil)
+		violations, err := linter.LintData(context.Background(), data, "<test>", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -922,7 +922,7 @@ metadata:
 	})
 
 	t.Run("non-ignored unknown annotation still reported", func(t *testing.T) {
-		violations, err := linter.Run(linter.Options{
+		violations, err := linter.Run(context.Background(), linter.Options{
 			Paths: []string{"../../testdata/invalid/ignore_directive_mixed.yaml"},
 		})
 		if err != nil {
@@ -946,7 +946,7 @@ metadata:
     olm.operatorGroup: og-test
     olm.does-not-exist: "true"
 `)
-		violations, err := linter.LintData(data, "<test>", nil)
+		violations, err := linter.LintData(context.Background(), data, "<test>", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -968,7 +968,7 @@ metadata:
   # olm-annotation-lint: ignore
   operators.operatorframework.io.bundle.nonexistent.v1: foo
 `)
-		violations, err := linter.LintData(data, "<test>", nil)
+		violations, err := linter.LintData(context.Background(), data, "<test>", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -989,6 +989,64 @@ func TestBundleCompleteAnnotationsNoWarnings(t *testing.T) {
 		if v.Rule == rules.RuleMissingAnnotation {
 			t.Errorf("unexpected missing-annotation warning: %s", v.Annotation)
 		}
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+func severityPtr(s rules.Severity) *rules.Severity { return &s }
+
+func TestRuleConfigDisableByAnnotation(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths: []string{"../../testdata/invalid/controller_managed_annotation.yaml"},
+		Rules: map[string]linter.RuleConfig{
+			"olm.operatorGroup": {Enabled: boolPtr(false)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if findViolation(violations, "olm.operatorGroup", "") {
+		t.Error("expected disabled annotation to produce no violation")
+	}
+}
+
+func TestRuleConfigDisableByRuleID(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths: []string{"../../testdata/invalid/unknown_olm_annotation.yaml"},
+		Rules: map[string]linter.RuleConfig{
+			rules.RuleUnknownAnnotation: {Enabled: boolPtr(false)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "unknown OLM annotation") {
+		t.Error("expected unknown-annotation rule to be disabled")
+	}
+}
+
+func TestRuleConfigSeverityOverride(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths: []string{"../../testdata/invalid/unknown_olm_annotation.yaml"},
+		Rules: map[string]linter.RuleConfig{
+			"olm.operatorframework.io/bundle-install-timeout": {Severity: severityPtr(rules.SeverityWarning)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, v := range violations {
+		if v.Annotation == "olm.operatorframework.io/bundle-install-timeout" {
+			found = true
+			if v.Severity != rules.SeverityWarning {
+				t.Errorf("expected warning severity, got %s", v.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected overridden unknown annotation to still be reported")
 	}
 }
 

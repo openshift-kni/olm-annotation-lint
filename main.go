@@ -41,12 +41,18 @@ func (s *stringOrList) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+type ruleConfig struct {
+	Enabled  *bool  `yaml:"enabled"`
+	Severity string `yaml:"severity"`
+}
+
 type config struct {
-	Path    stringOrList `yaml:"path"`
-	Exclude stringOrList `yaml:"exclude"`
-	Allow   stringOrList `yaml:"allow"`
-	Strict  *bool        `yaml:"strict"`
-	Format  string       `yaml:"format"`
+	Path    stringOrList          `yaml:"path"`
+	Exclude stringOrList          `yaml:"exclude"`
+	Allow   stringOrList          `yaml:"allow"`
+	Strict  *bool                 `yaml:"strict"`
+	Format  string                `yaml:"format"`
+	Rules   map[string]ruleConfig `yaml:"rules"`
 }
 
 func loadConfig(path string) (*config, error) {
@@ -70,6 +76,25 @@ func discoverConfig() (*config, error) {
 		return nil, err
 	}
 	return nil, nil
+}
+
+func ruleConfigsFrom(cfg *config) (map[string]linter.RuleConfig, error) {
+	if cfg == nil || len(cfg.Rules) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]linter.RuleConfig, len(cfg.Rules))
+	for key, rc := range cfg.Rules {
+		converted := linter.RuleConfig{Enabled: rc.Enabled}
+		if rc.Severity != "" {
+			sev, err := rules.ParseSeverity(rc.Severity)
+			if err != nil {
+				return nil, fmt.Errorf("rules.%s.severity: %w", key, err)
+			}
+			converted.Severity = &sev
+		}
+		out[key] = converted
+	}
+	return out, nil
 }
 
 func main() {
@@ -166,6 +191,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	ruleConfigs, err := ruleConfigsFrom(cfg)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+
 	ctx := context.Background()
 	if timeout > 0 {
 		var cancel context.CancelFunc
@@ -177,6 +208,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		Paths:              paths,
 		Exclude:            excludePaths,
 		AllowedAnnotations: allowedAnnotations,
+		Rules:              ruleConfigs,
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)

@@ -43,9 +43,20 @@ exclude:
 allow:
   - "olm.operatorframework.io/bundle-install-timeout"
 strict: false
+format: text
+rules:
+  olm.operatorGroup:
+    enabled: false
+  unknown-annotation:
+    severity: warning
 ```
 
 Fields accept either a list or a comma-separated string (e.g., `exclude: "vendor,testdata"`).
+
+The `rules` map is keyed by annotation name (`olm.skipRange`) or rule ID
+(`unknown-annotation`, `case-mismatch`, `controller-managed`, and so on).
+Set `enabled: false` to suppress matching violations, or `severity` to
+`error`, `warning`, or `info`.
 
 The config file is auto-discovered in the current directory. Use `--config` to specify a
 custom path. CLI flags always take precedence over config file values.

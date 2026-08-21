@@ -31,6 +31,19 @@ func (s Severity) String() string {
 	}
 }
 
+func ParseSeverity(s string) (Severity, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "error":
+		return SeverityError, nil
+	case "warning", "warn":
+		return SeverityWarning, nil
+	case "info", "notice":
+		return SeverityInfo, nil
+	default:
+		return 0, fmt.Errorf("unknown severity %q (supported: error, warning, info)", s)
+	}
+}
+
 const (
 	RuleUnknownAnnotation = "unknown-annotation"
 	RuleCaseMismatch      = "case-mismatch"

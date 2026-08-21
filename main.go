@@ -135,6 +135,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		strict      bool
 		format      string
 		configPath  string
+		outputPath  string
 		timeout     time.Duration
 		showVersion bool
 		listRules   bool
@@ -154,6 +155,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&format, "f", "text", "Output format: text, json, github, junit, sarif (shorthand)")
 	fs.StringVar(&configPath, "config", "", "Path to config file (default: .olm-lint.yaml in current directory)")
 	fs.StringVar(&configPath, "c", "", "Path to config file (shorthand)")
+	fs.StringVar(&outputPath, "output", "", "Write results to a file")
+	fs.StringVar(&outputPath, "o", "", "Write results to a file (shorthand)")
 	fs.DurationVar(&timeout, "timeout", 0, "Maximum duration (e.g. 30s, 5m); 0 means no timeout")
 	fs.BoolVar(&showVersion, "version", false, "Print version and exit")
 	fs.BoolVar(&showVersion, "v", false, "Print version and exit (shorthand)")
@@ -247,8 +250,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	if len(violations) > 0 {
-		reporter.Report(stdout, violations, outputFormat, currentVersion())
+	reportWriter := stdout
+	if outputPath != "" {
+		f, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // output path is user-specified CLI input
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: cannot write output file %s: %v\n", outputPath, err)
+			return 2
+		}
+		defer func() { _ = f.Close() }()
+		reportWriter = f
+	}
+
+	if len(violations) > 0 || outputPath != "" {
+		reporter.Report(reportWriter, violations, outputFormat, currentVersion())
 	}
 
 	var errorCount, warningCount int

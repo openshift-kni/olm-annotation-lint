@@ -281,6 +281,37 @@ func TestRunListRules(t *testing.T) {
 	}
 }
 
+func TestRunOutputFlag(t *testing.T) {
+	dir := t.TempDir()
+	outPath := filepath.Join(dir, "results.json")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--path", "testdata/invalid/unknown_olm_annotation.yaml", "--format", "json", "--output", outPath}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("expected exit 1, got %d: %s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), `"violations"`) {
+		t.Errorf("JSON should be written to the file, not stdout: %s", stdout.String())
+	}
+	data, err := os.ReadFile(outPath) //nolint:gosec // test-controlled temp file
+	if err != nil {
+		t.Fatalf("expected output file: %v", err)
+	}
+	if !strings.Contains(string(data), `"violations"`) {
+		t.Errorf("expected JSON report in output file, got: %s", data)
+	}
+	if !strings.Contains(stderr.String(), "error(s)") {
+		t.Errorf("expected summary on stderr, got: %s", stderr.String())
+	}
+}
+
+func TestRunOutputFlagUnwritable(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--path", "testdata/valid", "--output", "/no/such/dir/results.json"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit 2 for unwritable output, got %d", code)
+	}
+}
+
 func TestRunInvalidRuleSeverity(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")

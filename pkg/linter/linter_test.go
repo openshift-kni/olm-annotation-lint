@@ -1,6 +1,8 @@
 package linter_test
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -9,7 +11,7 @@ import (
 )
 
 func TestValidFiles(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid"},
 	})
 	if err != nil {
@@ -23,7 +25,7 @@ func TestValidFiles(t *testing.T) {
 }
 
 func TestUnknownAnnotation(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/unknown_olm_annotation.yaml"},
 	})
 	if err != nil {
@@ -37,10 +39,15 @@ func TestUnknownAnnotation(t *testing.T) {
 	if rule := findViolationRule(violations, "olm.operatorframework.io/bundle-install-timeout"); rule != rules.RuleUnknownAnnotation {
 		t.Errorf("expected rule 'unknown-annotation', got %q", rule)
 	}
+	for _, v := range violations {
+		if v.Annotation == "olm.operatorframework.io/bundle-install-timeout" && v.Name != "cert-manager-operator" {
+			t.Errorf("expected resource name cert-manager-operator, got %q", v.Name)
+		}
+	}
 }
 
 func TestWrongResourceType(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/wrong_resource_type.yaml"},
 	})
 	if err != nil {
@@ -57,7 +64,7 @@ func TestWrongResourceType(t *testing.T) {
 }
 
 func TestBadDurationValue(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/bad_duration_value.yaml"},
 	})
 	if err != nil {
@@ -74,7 +81,7 @@ func TestBadDurationValue(t *testing.T) {
 }
 
 func TestBadJSONValue(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/bad_json_value.yaml"},
 	})
 	if err != nil {
@@ -88,7 +95,7 @@ func TestBadJSONValue(t *testing.T) {
 }
 
 func TestBadTemplateValue(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/bad_template_value.yaml"},
 	})
 	if err != nil {
@@ -101,8 +108,22 @@ func TestBadTemplateValue(t *testing.T) {
 	}
 }
 
+func TestUnknownTemplateVariable(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths: []string{"../../testdata/invalid/unknown_template_variable.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := findViolation(violations, "olm.catalogImageTemplate", "unknown variable")
+	if !found {
+		t.Error("expected violation for unknown template variable")
+	}
+}
+
 func TestBadSemverRange(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/bad_semver_range.yaml"},
 	})
 	if err != nil {
@@ -116,7 +137,7 @@ func TestBadSemverRange(t *testing.T) {
 }
 
 func TestWrongPrefix(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/wrong_prefix.yaml"},
 	})
 	if err != nil {
@@ -130,24 +151,35 @@ func TestWrongPrefix(t *testing.T) {
 }
 
 func TestCaseMismatch(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/case_mismatch.yaml"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	found := findViolation(violations, "OLM.providedAPIs", "wrong casing")
+	found := findViolation(violations, "OLM.providedAPIs", "case mismatch")
 	if !found {
 		t.Error("expected violation for case mismatch")
 	}
 	if rule := findViolationRule(violations, "OLM.providedAPIs"); rule != rules.RuleCaseMismatch {
 		t.Errorf("expected rule 'case-mismatch', got %q", rule)
 	}
+	for _, v := range violations {
+		if v.Annotation == "OLM.providedAPIs" {
+			if v.Suggestion != "olm.providedAPIs" {
+				t.Errorf("expected suggestion %q, got %q", "olm.providedAPIs", v.Suggestion)
+			}
+			if !strings.Contains(v.Message, `use "olm.providedAPIs" instead of "OLM.providedAPIs"`) {
+				t.Errorf("expected message to name both keys, got %q", v.Message)
+			}
+			break
+		}
+	}
 }
 
 func TestControllerManagedAnnotation(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/controller_managed_annotation.yaml"},
 	})
 	if err != nil {
@@ -164,7 +196,7 @@ func TestControllerManagedAnnotation(t *testing.T) {
 }
 
 func TestExcludePaths(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths:   []string{"../../testdata"},
 		Exclude: []string{"invalid"},
 	})
@@ -177,7 +209,7 @@ func TestExcludePaths(t *testing.T) {
 }
 
 func TestAllowedAnnotationOverride(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths:              []string{"../../testdata/invalid/unknown_olm_annotation.yaml"},
 		AllowedAnnotations: []string{"olm.operatorframework.io/bundle-install-timeout"},
 	})
@@ -206,7 +238,7 @@ func TestAllowedAnnotationOverride(t *testing.T) {
 }
 
 func TestAllowedAnnotationDoesNotAffectKnownRules(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths:              []string{"../../testdata/valid"},
 		AllowedAnnotations: []string{"olm.operatorframework.io/bundle-install-timeout"},
 	})
@@ -221,7 +253,7 @@ func TestAllowedAnnotationDoesNotAffectKnownRules(t *testing.T) {
 }
 
 func TestMultiDocumentValid(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid/multi_document.yaml"},
 	})
 	if err != nil {
@@ -235,7 +267,7 @@ func TestMultiDocumentValid(t *testing.T) {
 }
 
 func TestMultiDocumentMixed(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/multi_document_mixed.yaml"},
 	})
 	if err != nil {
@@ -255,7 +287,7 @@ func TestMultiDocumentMixed(t *testing.T) {
 }
 
 func TestEmptyFile(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid/empty_file.yaml"},
 	})
 	if err != nil {
@@ -267,7 +299,7 @@ func TestEmptyFile(t *testing.T) {
 }
 
 func TestCommentsOnlyFile(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid/comments_only.yaml"},
 	})
 	if err != nil {
@@ -279,7 +311,7 @@ func TestCommentsOnlyFile(t *testing.T) {
 }
 
 func TestNoMetadataResource(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid/no_metadata.yaml"},
 	})
 	if err != nil {
@@ -302,7 +334,7 @@ metadata:
 spec:
   displayName: Test Operator
 `)
-	violations, err := linter.LintData(data, "<stdin>", nil)
+	violations, err := linter.LintData(context.Background(), data, "<stdin>", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -323,7 +355,7 @@ metadata:
 spec:
   upgradeStrategy: Default
 `)
-	violations, err := linter.LintData(data, "<stdin>", nil)
+	violations, err := linter.LintData(context.Background(), data, "<stdin>", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -361,7 +393,7 @@ metadata:
 spec:
   upgradeStrategy: Default
 `)
-	violations, err := linter.LintData(data, "<stdin>", nil)
+	violations, err := linter.LintData(context.Background(), data, "<stdin>", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -372,7 +404,7 @@ spec:
 }
 
 func TestMalformedYAML(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/malformed_yaml.yaml"},
 	})
 	if err != nil {
@@ -394,7 +426,7 @@ func TestMalformedYAML(t *testing.T) {
 }
 
 func TestInvalidK8sResource(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid/invalid_k8s_resource.yaml"},
 	})
 	if err != nil {
@@ -410,7 +442,7 @@ func TestInvalidK8sResource(t *testing.T) {
 }
 
 func TestEmptyAnnotations(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid/empty_annotations.yaml"},
 	})
 	if err != nil {
@@ -422,7 +454,7 @@ func TestEmptyAnnotations(t *testing.T) {
 }
 
 func TestNonOLMAnnotationsOnly(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid/non_olm_annotations_only.yaml"},
 	})
 	if err != nil {
@@ -434,7 +466,7 @@ func TestNonOLMAnnotationsOnly(t *testing.T) {
 }
 
 func TestMultiDocumentAllInvalid(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/multi_document_all_invalid.yaml"},
 	})
 	if err != nil {
@@ -459,7 +491,7 @@ func TestMultiDocumentAllInvalid(t *testing.T) {
 }
 
 func TestWhitespaceOnlyFile(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid/whitespace_only.yaml"},
 	})
 	if err != nil {
@@ -471,7 +503,7 @@ func TestWhitespaceOnlyFile(t *testing.T) {
 }
 
 func TestMultipleViolationsSingleResource(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/multiple_violations_single_resource.yaml"},
 	})
 	if err != nil {
@@ -487,7 +519,7 @@ func TestMultipleViolationsSingleResource(t *testing.T) {
 	}{
 		{"olm.skipRange", "invalid semver range", rules.SeverityError},
 		{"olm.unknown-annotation", "unknown OLM annotation", rules.SeverityError},
-		{"OLM.providedAPIs", "wrong casing", rules.SeverityError},
+		{"OLM.providedAPIs", "case mismatch", rules.SeverityError},
 		{"olm.operatorGroup", "controller-managed", rules.SeverityWarning},
 	}
 	for _, expected := range expectedViolations {
@@ -508,7 +540,7 @@ func TestMultipleViolationsSingleResource(t *testing.T) {
 }
 
 func TestDeeplyNestedStructure(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid/deeply_nested_structure.yaml"},
 	})
 	if err != nil {
@@ -522,7 +554,7 @@ func TestDeeplyNestedStructure(t *testing.T) {
 }
 
 func TestNonExistentPath(t *testing.T) {
-	_, err := linter.Run(linter.Options{
+	_, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"/nonexistent/path"},
 	})
 	if err == nil {
@@ -534,7 +566,7 @@ func TestNonExistentPath(t *testing.T) {
 }
 
 func TestDirectoryWithNoYAMLFiles(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../pkg"},
 	})
 	if err != nil {
@@ -546,7 +578,7 @@ func TestDirectoryWithNoYAMLFiles(t *testing.T) {
 }
 
 func TestStdinMultipleTimesError(t *testing.T) {
-	_, err := linter.Run(linter.Options{
+	_, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"-", "-"},
 	})
 	if err == nil {
@@ -558,7 +590,7 @@ func TestStdinMultipleTimesError(t *testing.T) {
 }
 
 func TestLintDataEmptyInput(t *testing.T) {
-	violations, err := linter.LintData([]byte(""), "<test>", nil)
+	violations, err := linter.LintData(context.Background(), []byte(""), "<test>", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -568,7 +600,7 @@ func TestLintDataEmptyInput(t *testing.T) {
 }
 
 func TestLintDataNilInput(t *testing.T) {
-	violations, err := linter.LintData(nil, "<test>", nil)
+	violations, err := linter.LintData(context.Background(), nil, "<test>", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -589,7 +621,7 @@ metadata:
 spec:
   upgradeStrategy: Default
 `)
-	violations, err := linter.LintData(data, "<test>", []string{"olm.custom-annotation"})
+	violations, err := linter.LintData(context.Background(), data, "<test>", []string{"olm.custom-annotation"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -608,7 +640,7 @@ spec:
 }
 
 func TestExcludeMultiplePatterns(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths:   []string{"../../testdata"},
 		Exclude: []string{"invalid", "valid"},
 	})
@@ -620,8 +652,39 @@ func TestExcludeMultiplePatterns(t *testing.T) {
 	}
 }
 
+func TestExcludeExactFilename(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths:   []string{"../../testdata/invalid"},
+		Exclude: []string{"unknown_olm_annotation.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, v := range violations {
+		if strings.Contains(v.File, "unknown_olm_annotation.yaml") {
+			t.Errorf("excluded filename should not produce violations, got %+v", v)
+		}
+	}
+}
+
+func TestExcludeFileGlob(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths:   []string{"../../testdata/invalid"},
+		Exclude: []string{"*.generated.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if findViolation(violations, "olm.generated-only-annotation", "") {
+		t.Error("files matching *.generated.yaml should be skipped")
+	}
+	if !findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "unknown OLM annotation") {
+		t.Error("non-matching invalid files should still be reported")
+	}
+}
+
 func TestMultiplePathsValid(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{
 			"../../testdata/valid/csv_with_skip_range.yaml",
 			"../../testdata/valid/operatorgroup_with_unpack_timeout.yaml",
@@ -638,7 +701,7 @@ func TestMultiplePathsValid(t *testing.T) {
 }
 
 func TestMultiplePathsMixed(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{
 			"../../testdata/valid/csv_with_skip_range.yaml",
 			"../../testdata/invalid/unknown_olm_annotation.yaml",
@@ -655,7 +718,7 @@ func TestMultiplePathsMixed(t *testing.T) {
 
 func TestLintDataMalformedYAML(t *testing.T) {
 	data := []byte("key: [\ninvalid yaml")
-	violations, err := linter.LintData(data, "<test>", nil)
+	violations, err := linter.LintData(context.Background(), data, "<test>", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -672,7 +735,7 @@ func TestLintDataMalformedYAML(t *testing.T) {
 }
 
 func TestBundleAnnotationsValid(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid/bundle_annotations.yaml"},
 	})
 	if err != nil {
@@ -686,7 +749,7 @@ func TestBundleAnnotationsValid(t *testing.T) {
 }
 
 func TestBundleAnnotationsWithMetrics(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid/bundle_annotations_with_metrics.yaml"},
 	})
 	if err != nil {
@@ -700,7 +763,7 @@ func TestBundleAnnotationsWithMetrics(t *testing.T) {
 }
 
 func TestClusterExtensionNoAnnotations(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid/clusterextension.yaml"},
 	})
 	if err != nil {
@@ -714,7 +777,7 @@ func TestClusterExtensionNoAnnotations(t *testing.T) {
 }
 
 func TestBundleAnnotationsBadMediatype(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/bundle_bad_mediatype.yaml"},
 	})
 	if err != nil {
@@ -728,7 +791,7 @@ func TestBundleAnnotationsBadMediatype(t *testing.T) {
 }
 
 func TestBundleAnnotationsUnknown(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/bundle_unknown_annotation.yaml"},
 	})
 	if err != nil {
@@ -742,16 +805,21 @@ func TestBundleAnnotationsUnknown(t *testing.T) {
 }
 
 func TestBundleAnnotationsCaseMismatch(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/bundle_case_mismatch.yaml"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	found := findViolation(violations, "operators.operatorframework.io.bundle.MediaType.v1", "wrong casing")
+	found := findViolation(violations, "operators.operatorframework.io.bundle.MediaType.v1", "case mismatch")
 	if !found {
 		t.Error("expected violation for bundle annotation case mismatch")
+	}
+	for _, v := range violations {
+		if v.Annotation == "operators.operatorframework.io.bundle.MediaType.v1" && v.Suggestion != "operators.operatorframework.io.bundle.mediatype.v1" {
+			t.Errorf("expected suggestion %q, got %q", "operators.operatorframework.io.bundle.mediatype.v1", v.Suggestion)
+		}
 	}
 }
 
@@ -759,7 +827,7 @@ func TestBundleAnnotationsSkipNonBundle(t *testing.T) {
 	data := []byte(`some_key: some_value
 another_key: another_value
 `)
-	violations, err := linter.LintData(data, "<test>", nil)
+	violations, err := linter.LintData(context.Background(), data, "<test>", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -777,7 +845,7 @@ func TestBundleAnnotationsLintData(t *testing.T) {
   operators.operatorframework.io.bundle.channels.v1: alpha
   operators.operatorframework.io.bundle.channel.default.v1: alpha
 `)
-	violations, err := linter.LintData(data, "<test>", nil)
+	violations, err := linter.LintData(context.Background(), data, "<test>", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -797,7 +865,7 @@ func TestBundleAnnotationsLintDataBadMediatype(t *testing.T) {
   operators.operatorframework.io.bundle.channels.v1: alpha
   operators.operatorframework.io.bundle.channel.default.v1: alpha
 `)
-	violations, err := linter.LintData(data, "<test>", nil)
+	violations, err := linter.LintData(context.Background(), data, "<test>", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -808,7 +876,7 @@ func TestBundleAnnotationsLintDataBadMediatype(t *testing.T) {
 }
 
 func TestBundleMissingAnnotations(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/bundle_missing_annotations.yaml"},
 	})
 	if err != nil {
@@ -852,7 +920,7 @@ func TestBundleMissingAnnotationsLintData(t *testing.T) {
 	data := []byte(`annotations:
   operators.operatorframework.io.bundle.mediatype.v1: registry+v1
 `)
-	violations, err := linter.LintData(data, "<test>", nil)
+	violations, err := linter.LintData(context.Background(), data, "<test>", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -867,8 +935,101 @@ func TestBundleMissingAnnotationsLintData(t *testing.T) {
 	}
 }
 
+func TestInlineIgnoreDirective(t *testing.T) {
+	t.Run("head comment ignores unknown annotation", func(t *testing.T) {
+		data := []byte(`apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  annotations:
+    # olm-annotation-lint: ignore
+    olm.operatorframework.io/bundle-install-timeout: "10m"
+  name: test
+`)
+		violations, err := linter.LintData(context.Background(), data, "<test>", nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "") {
+			t.Error("expected ignored annotation to produce no violation")
+		}
+	})
+
+	t.Run("line comment ignores unknown annotation", func(t *testing.T) {
+		data := []byte(`apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  annotations:
+    olm.operatorframework.io/bundle-install-timeout: "10m" # olm-annotation-lint: ignore
+  name: test
+`)
+		violations, err := linter.LintData(context.Background(), data, "<test>", nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "") {
+			t.Error("expected line-comment ignored annotation to produce no violation")
+		}
+	})
+
+	t.Run("non-ignored unknown annotation still reported", func(t *testing.T) {
+		violations, err := linter.Run(context.Background(), linter.Options{
+			Paths: []string{"../../testdata/invalid/ignore_directive_mixed.yaml"},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "") {
+			t.Error("expected ignored annotation to produce no violation")
+		}
+		if !findViolation(violations, "olm.operatorframework.io/not-ignored", "unknown OLM annotation") {
+			t.Error("expected violation for non-ignored unknown annotation")
+		}
+	})
+
+	t.Run("specific rule ignore leaves other rules", func(t *testing.T) {
+		data := []byte(`apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: test
+  annotations:
+    # olm-annotation-lint: ignore controller-managed
+    olm.operatorGroup: og-test
+    olm.does-not-exist: "true"
+`)
+		violations, err := linter.LintData(context.Background(), data, "<test>", nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if findViolation(violations, "olm.operatorGroup", "") {
+			t.Error("expected controller-managed violation to be ignored")
+		}
+		if !findViolation(violations, "olm.does-not-exist", "unknown OLM annotation") {
+			t.Error("expected unknown annotation without matching ignore to be reported")
+		}
+	})
+
+	t.Run("bundle annotations ignore", func(t *testing.T) {
+		data := []byte(`annotations:
+  operators.operatorframework.io.bundle.mediatype.v1: registry+v1
+  operators.operatorframework.io.bundle.manifests.v1: manifests/
+  operators.operatorframework.io.bundle.metadata.v1: metadata/
+  operators.operatorframework.io.bundle.package.v1: etcd
+  operators.operatorframework.io.bundle.channels.v1: alpha
+  # olm-annotation-lint: ignore
+  operators.operatorframework.io.bundle.nonexistent.v1: foo
+`)
+		violations, err := linter.LintData(context.Background(), data, "<test>", nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if findViolation(violations, "operators.operatorframework.io.bundle.nonexistent.v1", "") {
+			t.Error("expected ignored bundle annotation to produce no violation")
+		}
+	})
+}
+
 func TestBundleCompleteAnnotationsNoWarnings(t *testing.T) {
-	violations, err := linter.Run(linter.Options{
+	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/valid/bundle_annotations.yaml"},
 	})
 	if err != nil {
@@ -878,6 +1039,114 @@ func TestBundleCompleteAnnotationsNoWarnings(t *testing.T) {
 		if v.Rule == rules.RuleMissingAnnotation {
 			t.Errorf("unexpected missing-annotation warning: %s", v.Annotation)
 		}
+	}
+}
+
+func TestLintMixedBundleAnnotations(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths: []string{"../../testdata/invalid/mixed-bundle-annotations.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !findViolation(violations, "operators.operatorframework.io.bundle.nonexistent.v1", "unknown OLM annotation") {
+		t.Error("expected violation for unknown bundle annotation")
+	}
+	if !findViolation(violations, "operators.operatorframework.io.bundle.MediaType.v1", "case mismatch") {
+		t.Error("expected violation for case-mismatched bundle annotation")
+	}
+
+	valid := []string{
+		"operators.operatorframework.io.bundle.mediatype.v1",
+		"operators.operatorframework.io.bundle.manifests.v1",
+		"operators.operatorframework.io.bundle.metadata.v1",
+		"operators.operatorframework.io.bundle.package.v1",
+		"operators.operatorframework.io.bundle.channels.v1",
+		"operators.operatorframework.io.bundle.channel.default.v1",
+	}
+	for _, key := range valid {
+		if findViolation(violations, key, "") {
+			t.Errorf("valid annotation %s should not be flagged", key)
+		}
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+func severityPtr(s rules.Severity) *rules.Severity { return &s }
+
+func TestRuleConfigDisableByAnnotation(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths: []string{"../../testdata/invalid/controller_managed_annotation.yaml"},
+		Rules: map[string]linter.RuleConfig{
+			"olm.operatorGroup": {Enabled: boolPtr(false)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if findViolation(violations, "olm.operatorGroup", "") {
+		t.Error("expected disabled annotation to produce no violation")
+	}
+}
+
+func TestRuleConfigDisableByRuleID(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths: []string{"../../testdata/invalid/unknown_olm_annotation.yaml"},
+		Rules: map[string]linter.RuleConfig{
+			rules.RuleUnknownAnnotation: {Enabled: boolPtr(false)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if findViolation(violations, "olm.operatorframework.io/bundle-install-timeout", "unknown OLM annotation") {
+		t.Error("expected unknown-annotation rule to be disabled")
+	}
+}
+
+func TestRuleConfigSeverityOverride(t *testing.T) {
+	violations, err := linter.Run(context.Background(), linter.Options{
+		Paths: []string{"../../testdata/invalid/unknown_olm_annotation.yaml"},
+		Rules: map[string]linter.RuleConfig{
+			"olm.operatorframework.io/bundle-install-timeout": {Severity: severityPtr(rules.SeverityWarning)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, v := range violations {
+		if v.Annotation == "olm.operatorframework.io/bundle-install-timeout" {
+			found = true
+			if v.Severity != rules.SeverityWarning {
+				t.Errorf("expected warning severity, got %s", v.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected overridden unknown annotation to still be reported")
+	}
+}
+
+func TestRunCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := linter.Run(ctx, linter.Options{
+		Paths: []string{"../../testdata/valid"},
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
+
+func TestLintDataCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := linter.LintData(ctx, []byte("apiVersion: v1\nkind: ConfigMap\n"), "<test>", nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
 	}
 }
 

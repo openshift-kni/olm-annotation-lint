@@ -49,6 +49,33 @@ func TestReportText(t *testing.T) {
 	}
 }
 
+func TestReportTextSuggestion(t *testing.T) {
+	violations := []linter.Violation{
+		{
+			File:       "test.yaml",
+			Line:       5,
+			Annotation: "OLM.providedAPIs",
+			Kind:       "OperatorGroup",
+			Severity:   rules.SeverityError,
+			Rule:       rules.RuleCaseMismatch,
+			Message:    `annotation case mismatch: use "olm.providedAPIs" instead of "OLM.providedAPIs"`,
+			Suggestion: "olm.providedAPIs",
+		},
+	}
+	var buf bytes.Buffer
+	reporter.Report(&buf, violations, reporter.FormatText, "1.0.0")
+	output := buf.String()
+	if !strings.Contains(output, "Suggestion: olm.providedAPIs") {
+		t.Errorf("expected suggestion line in text output, got: %s", output)
+	}
+
+	buf.Reset()
+	reporter.Report(&buf, violations, reporter.FormatJSON, "1.0.0")
+	if !strings.Contains(buf.String(), `"suggestion": "olm.providedAPIs"`) {
+		t.Errorf("expected suggestion field in JSON output, got: %s", buf.String())
+	}
+}
+
 func TestReportJSON(t *testing.T) {
 	var buf bytes.Buffer
 	reporter.Report(&buf, testViolations, reporter.FormatJSON, "1.0.0")

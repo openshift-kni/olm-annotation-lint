@@ -367,4 +367,46 @@ func TestPrintRules(t *testing.T) {
 	if !strings.Contains(output, "(bundle mediatype)") {
 		t.Error("expected bundle mediatype format in output")
 	}
+	if !strings.Contains(output, "Override the default bundle unpack job deadline") {
+		t.Error("expected user-settable description in output")
+	}
+	if !strings.Contains(output, "Identifies which OperatorGroup owns this CSV") {
+		t.Error("expected controller-managed description in output")
+	}
+	if !strings.Contains(output, "Bundle format type") {
+		t.Error("expected bundle annotation description in output")
+	}
+}
+
+func TestParseSeverity(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    rules.Severity
+		wantErr bool
+	}{
+		{"error", rules.SeverityError, false},
+		{"WARNING", rules.SeverityWarning, false},
+		{"warn", rules.SeverityWarning, false},
+		{"info", rules.SeverityInfo, false},
+		{"notice", rules.SeverityInfo, false},
+		{"banana", 0, true},
+		{"", 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			got, err := rules.ParseSeverity(tt.in)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

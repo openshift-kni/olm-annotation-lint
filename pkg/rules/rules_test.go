@@ -176,8 +176,11 @@ func TestValidateTemplate(t *testing.T) {
 	}{
 		{"with vars", "quay.io/example/catalog:v{kube_major_version}.{kube_minor_version}", true},
 		{"plain string", "quay.io/example/catalog:latest", true},
-		{"single var", "image:{tag}", true},
+		{"single known var", "image:{kube_patch_version}", true},
 		{"empty", "", true},
+		{"unknown var", "image:{tag}", false},
+		{"typo var", "quay.io/example:{typo_variable}", false},
+		{"empty braces", "image:{}", false},
 		{"unclosed brace", "quay.io/example:{unclosed", false},
 		{"extra close", "quay.io/example:closed}", false},
 		{"nested braces", "quay.io/example:{{nested}}", false},
@@ -366,5 +369,59 @@ func TestPrintRules(t *testing.T) {
 	}
 	if !strings.Contains(output, "(bundle mediatype)") {
 		t.Error("expected bundle mediatype format in output")
+	}
+	if !strings.Contains(output, "Examples: 10m, 1h30m") {
+		t.Error("expected duration examples in output")
+	}
+	if !strings.Contains(output, "Since: v1.0.0") {
+		t.Error("expected Since version in output")
+	}
+	if !strings.Contains(output, "docs/annotations.md") {
+		t.Error("expected docs URL in output")
+	}
+	if !strings.Contains(output, ">=1.0.0 <2.0.0") {
+		t.Error("expected semver example in output")
+	}
+	if !strings.Contains(output, "Override the default bundle unpack job deadline") {
+		t.Error("expected user-settable description in output")
+	}
+	if !strings.Contains(output, "Identifies which OperatorGroup owns this CSV") {
+		t.Error("expected controller-managed description in output")
+	}
+	if !strings.Contains(output, "Bundle format type") {
+		t.Error("expected bundle annotation description in output")
+	}
+}
+
+func TestParseSeverity(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    rules.Severity
+		wantErr bool
+	}{
+		{"error", rules.SeverityError, false},
+		{"WARNING", rules.SeverityWarning, false},
+		{"warn", rules.SeverityWarning, false},
+		{"info", rules.SeverityInfo, false},
+		{"notice", rules.SeverityInfo, false},
+		{"banana", 0, true},
+		{"", 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			got, err := rules.ParseSeverity(tt.in)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

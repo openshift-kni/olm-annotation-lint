@@ -31,6 +31,19 @@ func (s Severity) String() string {
 	}
 }
 
+func ParseSeverity(s string) (Severity, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "error":
+		return SeverityError, nil
+	case "warning", "warn":
+		return SeverityWarning, nil
+	case "info", "notice":
+		return SeverityInfo, nil
+	default:
+		return 0, fmt.Errorf("unknown severity %q (supported: error, warning, info)", s)
+	}
+}
+
 const (
 	RuleUnknownAnnotation = "unknown-annotation"
 	RuleCaseMismatch      = "case-mismatch"
@@ -40,6 +53,7 @@ const (
 	RuleInvalidValue      = "invalid-value"
 	RuleMissingAnnotation = "missing-annotation"
 	RuleBundlePackage     = "bundle-package-mismatch"
+	RuleDuplicateKey      = "duplicate-key"
 )
 
 var RequiredBundleAnnotations []string
@@ -71,7 +85,15 @@ type AnnotationRule struct {
 	Required      bool
 	Format        ValueFormat
 	Description   string
+	Examples      []string
+	LearnMore     string
+	Since         string
+	Deprecated    bool
+	ReplacedBy    string
 }
+
+const defaultLearnMore = "https://github.com/openshift-kni/olm-annotation-lint/blob/main/docs/annotations.md"
+const defaultSince = "v1.0.0"
 
 var userSettable = []AnnotationRule{
 	{
@@ -333,20 +355,32 @@ func ValidateJSON(value string) bool {
 	return json.Valid([]byte(value))
 }
 
+var allowedTemplateVars = map[string]bool{
+	"kube_major_version": true,
+	"kube_minor_version": true,
+	"kube_patch_version": true,
+}
+
 func ValidateTemplate(value string) bool {
 	depth := 0
-	for _, ch := range value {
+	varNameStart := -1
+	for i, ch := range value {
 		switch ch {
 		case '{':
 			depth++
 			if depth > 1 {
 				return false
 			}
+			varNameStart = i + 1
 		case '}':
 			depth--
 			if depth < 0 {
 				return false
 			}
+			if varNameStart < 0 || !allowedTemplateVars[value[varNameStart:i]] {
+				return false
+			}
+			varNameStart = -1
 		}
 	}
 	return depth == 0
@@ -424,19 +458,78 @@ func formatName(f ValueFormat) string {
 	}
 }
 
+func (r AnnotationRule) exampleValues() []string {
+	if len(r.Examples) > 0 {
+		return r.Examples
+	}
+	switch r.Format {
+	case FormatDuration:
+		return []string{"10m", "1h30m"}
+	case FormatJSON:
+		return []string{`{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"my-operator"}}`}
+	case FormatTemplate:
+		return []string{"quay.io/example/catalog:v{kube_major_version}.{kube_minor_version}"}
+	case FormatSemverRange:
+		return []string{">=1.0.0 <2.0.0"}
+	case FormatBundleMediatype:
+		return []string{"registry+v1"}
+	case FormatCommaSeparated:
+		return []string{"alpha,stable"}
+	default:
+		return nil
+	}
+}
+
+func (r AnnotationRule) learnMoreURL() string {
+	if r.LearnMore != "" {
+		return r.LearnMore
+	}
+	return defaultLearnMore
+}
+
+func (r AnnotationRule) sinceVersion() string {
+	if r.Since != "" {
+		return r.Since
+	}
+	return defaultSince
+}
+
 func PrintRules(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "User-settable annotations:")
 	for _, r := range userSettable {
-		_, _ = fmt.Fprintf(w, "  %-65s %s  (%s)\n", r.Key, strings.Join(r.ResourceKinds, ", "), formatName(r.Format))
+		printRule(w, r, true)
 	}
 	_, _ = fmt.Fprintln(w, "")
 	_, _ = fmt.Fprintln(w, "Controller-managed annotations (should not be set by users):")
 	for _, r := range controllerManaged {
-		_, _ = fmt.Fprintf(w, "  %-65s %s\n", r.Key, strings.Join(r.ResourceKinds, ", "))
+		printRule(w, r, true)
 	}
 	_, _ = fmt.Fprintln(w, "")
 	_, _ = fmt.Fprintln(w, "Bundle annotations (in metadata/annotations.yaml):")
 	for _, r := range bundleAnnotations {
-		_, _ = fmt.Fprintf(w, "  %-65s (%s)\n", r.Key, formatName(r.Format))
+		printRule(w, r, false)
 	}
+}
+
+func printRule(w io.Writer, r AnnotationRule, includeKind bool) {
+	deprecated := ""
+	if r.Deprecated {
+		deprecated = " [DEPRECATED]"
+	}
+	if includeKind {
+		_, _ = fmt.Fprintf(w, "  %-65s %s  (%s)%s\n", r.Key, strings.Join(r.ResourceKinds, ", "), formatName(r.Format), deprecated)
+	} else {
+		_, _ = fmt.Fprintf(w, "  %-65s (%s)%s\n", r.Key, formatName(r.Format), deprecated)
+	}
+	if r.Description != "" {
+		_, _ = fmt.Fprintf(w, "    %s\n", r.Description)
+	}
+	if r.Deprecated && r.ReplacedBy != "" {
+		_, _ = fmt.Fprintf(w, "    Replaced by: %s\n", r.ReplacedBy)
+	}
+	if examples := r.exampleValues(); len(examples) > 0 {
+		_, _ = fmt.Fprintf(w, "    Examples: %s\n", strings.Join(examples, ", "))
+	}
+	_, _ = fmt.Fprintf(w, "    Since: %s\n", r.sinceVersion())
+	_, _ = fmt.Fprintf(w, "    Docs: %s\n", r.learnMoreURL())
 }

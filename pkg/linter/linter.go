@@ -2,6 +2,7 @@ package linter
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -18,9 +19,11 @@ type Violation struct {
 	Line       int
 	Annotation string
 	Kind       string
+	Name       string
 	Severity   rules.Severity
 	Rule       string
 	Message    string
+	Suggestion string
 }
 
 type k8sResource struct {
@@ -42,13 +45,65 @@ type Options struct {
 	Paths              []string
 	Exclude            []string
 	AllowedAnnotations []string
+	Rules              map[string]RuleConfig
 }
 
-func Run(opts Options) ([]Violation, error) {
+type allowList struct {
+	exact    map[string]bool
+	prefixes []string
+}
+
+func newAllowList(patterns []string) (allowList, error) {
+	a := allowList{exact: make(map[string]bool, len(patterns))}
+	for _, p := range patterns {
+		if p == "" {
+			continue
+		}
+		if strings.Contains(p, "*") {
+			if !strings.HasSuffix(p, "*") || strings.Count(p, "*") != 1 {
+				return allowList{}, fmt.Errorf("invalid allow pattern %q: only a trailing * wildcard is supported", p)
+			}
+			a.prefixes = append(a.prefixes, strings.TrimSuffix(p, "*"))
+			continue
+		}
+		a.exact[p] = true
+	}
+	return a, nil
+}
+
+func (a allowList) has(key string) bool {
+	if a.exact[key] {
+		return true
+	}
+	for _, prefix := range a.prefixes {
+		if strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// RuleConfig overrides whether a rule or annotation is enabled and its severity.
+// Map keys may be an annotation key (e.g. "olm.skipRange") or a rule ID
+// (e.g. "unknown-annotation").
+type RuleConfig struct {
+	Enabled  *bool
+	Severity *rules.Severity
+}
+
+func Run(ctx context.Context, opts Options) ([]Violation, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	var allViolations []Violation
 	stdinConsumed := false
 
 	for _, p := range opts.Paths {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
 		if p == "-" {
 			if stdinConsumed {
 				return nil, fmt.Errorf("stdin (-) can only be specified once")
@@ -58,7 +113,7 @@ func Run(opts Options) ([]Violation, error) {
 			if err != nil {
 				return nil, fmt.Errorf("reading stdin: %w", err)
 			}
-			violations, err := LintData(data, "<stdin>", opts.AllowedAnnotations)
+			violations, err := LintData(ctx, data, "<stdin>", opts.AllowedAnnotations)
 			if err != nil {
 				return nil, err
 			}
@@ -72,13 +127,13 @@ func Run(opts Options) ([]Violation, error) {
 		}
 
 		if info.IsDir() {
-			violations, err := lintDirectory(p, opts.Exclude, opts.AllowedAnnotations)
+			violations, err := lintDirectory(ctx, p, opts.Exclude, opts.AllowedAnnotations)
 			if err != nil {
 				return nil, err
 			}
 			allViolations = append(allViolations, violations...)
 		} else {
-			violations, err := lintFile(p, opts.AllowedAnnotations)
+			violations, err := lintFile(ctx, p, opts.AllowedAnnotations)
 			if err != nil {
 				return nil, err
 			}
@@ -86,10 +141,10 @@ func Run(opts Options) ([]Violation, error) {
 		}
 	}
 
-	return allViolations, nil
+	return applyRuleConfig(allViolations, opts.Rules), nil
 }
 
-func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([]Violation, error) {
+func lintDirectory(ctx context.Context, dir string, exclude []string, allowedAnnotations []string) ([]Violation, error) {
 	var violations []Violation
 	var bundleAnnotationFiles []string
 
@@ -97,16 +152,21 @@ func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([
 		if err != nil {
 			return err
 		}
-		if d.IsDir() {
-			for _, ex := range exclude {
-				matched, err := filepath.Match(ex, d.Name())
-				if err != nil {
-					return fmt.Errorf("invalid exclude pattern %q: %w", ex, err)
-				}
-				if matched {
-					return filepath.SkipDir
-				}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		skip, err := matchesExclude(d.Name(), exclude)
+		if err != nil {
+			return err
+		}
+		if skip {
+			if d.IsDir() {
+				return filepath.SkipDir
 			}
+			return nil
+		}
+		if d.IsDir() {
 			return nil
 		}
 
@@ -119,7 +179,7 @@ func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([
 			bundleAnnotationFiles = append(bundleAnnotationFiles, path)
 		}
 
-		fileViolations, err := lintFile(path, allowedAnnotations)
+		fileViolations, err := lintFile(ctx, path, allowedAnnotations)
 		if err != nil {
 			return err
 		}
@@ -134,24 +194,44 @@ func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([
 	return violations, nil
 }
 
-func lintFile(path string, allowedAnnotations []string) ([]Violation, error) {
+func matchesExclude(name string, exclude []string) (bool, error) {
+	for _, ex := range exclude {
+		matched, err := filepath.Match(ex, name)
+		if err != nil {
+			return false, fmt.Errorf("invalid exclude pattern %q: %w", ex, err)
+		}
+		if matched {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func lintFile(ctx context.Context, path string, allowedAnnotations []string) ([]Violation, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // lint target path is user-specified CLI input
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
-	return LintData(data, path, allowedAnnotations)
+	return LintData(ctx, data, path, allowedAnnotations)
 }
 
-func LintData(data []byte, source string, allowedAnnotations []string) ([]Violation, error) {
-	allowSet := make(map[string]bool, len(allowedAnnotations))
-	for _, a := range allowedAnnotations {
-		allowSet[a] = true
+func LintData(ctx context.Context, data []byte, source string, allowedAnnotations []string) ([]Violation, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	allowSet, err := newAllowList(allowedAnnotations)
+	if err != nil {
+		return nil, err
 	}
 
 	var violations []Violation
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
 		var node yaml.Node
 		err := decoder.Decode(&node)
 		if errors.Is(err, io.EOF) {
@@ -166,15 +246,22 @@ func LintData(data []byte, source string, allowedAnnotations []string) ([]Violat
 			break
 		}
 
+		dups := duplicateKeyViolations(findMappingValue(findMappingValue(&node, "metadata"), "annotations"), source, scalarValue(findMappingValue(&node, "kind")))
+		violations = append(violations, dups...)
+
 		var resource k8sResource
 		if err := node.Decode(&resource); err != nil {
-			violations = append(violations, Violation{
-				File:     source,
-				Line:     node.Line,
-				Severity: rules.SeverityWarning,
-				Message:  fmt.Sprintf("cannot decode as Kubernetes resource: %v", err),
-			})
-			continue
+			if len(dups) > 0 {
+				resource = resourceFromNode(&node)
+			} else {
+				violations = append(violations, Violation{
+					File:     source,
+					Line:     node.Line,
+					Severity: rules.SeverityWarning,
+					Message:  fmt.Sprintf("cannot decode as Kubernetes resource: %v", err),
+				})
+				continue
+			}
 		}
 
 		if resource.APIVersion == "" || resource.Kind == "" {
@@ -186,28 +273,32 @@ func LintData(data []byte, source string, allowedAnnotations []string) ([]Violat
 		}
 
 		annotationLines := extractAnnotationLines(&node)
+		ignores := extractIgnoreDirectives(findMappingValue(findMappingValue(&node, "metadata"), "annotations"))
 
 		for key, value := range resource.Metadata.Annotations {
 			if !rules.IsOLMAnnotation(key) {
 				continue
 			}
+			if ignores.skipAll(key) {
+				continue
+			}
 
 			line := annotationLines[key]
 
-			v := validateAnnotation(source, line, key, value, resource.Kind, allowSet)
-			violations = append(violations, v...)
+			v := validateAnnotation(source, line, key, value, resource.Kind, resource.Metadata.Name, allowSet)
+			violations = append(violations, ignores.filter(key, v)...)
 		}
 	}
 
 	return violations, nil
 }
 
-func validateAnnotation(file string, line int, key, value, kind string, allowedAnnotations map[string]bool) []Violation {
+func validateAnnotation(file string, line int, key, value, kind, name string, allowed allowList) []Violation {
 	var violations []Violation
 
 	newViolation := func(sev rules.Severity, ruleID, msg string) Violation {
 		return Violation{
-			File: file, Line: line, Annotation: key, Kind: kind,
+			File: file, Line: line, Annotation: key, Kind: kind, Name: name,
 			Severity: sev, Rule: ruleID, Message: msg,
 		}
 	}
@@ -216,12 +307,17 @@ func validateAnnotation(file string, line int, key, value, kind string, allowedA
 	if !found {
 		caseRule, caseFound := rules.FindRuleCaseInsensitive(key)
 		if caseFound {
-			violations = append(violations, newViolation(rules.SeverityError, rules.RuleCaseMismatch,
-				fmt.Sprintf("annotation has wrong casing, use %q", caseRule.Key)))
+			violations = append(violations, Violation{
+				File: file, Line: line, Annotation: key, Kind: kind, Name: name,
+				Severity:   rules.SeverityError,
+				Rule:       rules.RuleCaseMismatch,
+				Message:    fmt.Sprintf("annotation case mismatch: use %q instead of %q", caseRule.Key, key),
+				Suggestion: caseRule.Key,
+			})
 			return violations
 		}
 
-		if allowedAnnotations[key] {
+		if allowed.has(key) {
 			violations = append(violations, newViolation(rules.SeverityInfo, rules.RuleAllowedOverride,
 				fmt.Sprintf("annotation %q allowed via user override", key)))
 			return violations
@@ -256,7 +352,7 @@ func validateAnnotation(file string, line int, key, value, kind string, allowedA
 	case rules.FormatTemplate:
 		if !rules.ValidateTemplate(value) {
 			violations = append(violations, newViolation(rules.SeverityError, rules.RuleInvalidValue,
-				fmt.Sprintf("invalid template value %q, unbalanced curly braces", value)))
+				fmt.Sprintf("invalid template value %q, unbalanced braces or unknown variable (allowed: kube_major_version, kube_minor_version, kube_patch_version)", value)))
 		}
 	case rules.FormatSemverRange:
 		if !rules.ValidateSemverRange(value) {
@@ -294,6 +390,104 @@ func annotationLinesFromNode(node *yaml.Node) map[string]int {
 	return lines
 }
 
+func duplicateKeyViolations(node *yaml.Node, source, kind string) []Violation {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var violations []Violation
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key := node.Content[i].Value
+		if _, dup := seen[key]; dup {
+			violations = append(violations, Violation{
+				File:       source,
+				Line:       node.Content[i].Line,
+				Annotation: key,
+				Kind:       kind,
+				Severity:   rules.SeverityWarning,
+				Rule:       rules.RuleDuplicateKey,
+				Message:    fmt.Sprintf("duplicate annotation key %q", key),
+			})
+			continue
+		}
+		seen[key] = struct{}{}
+	}
+	return violations
+}
+
+const ignoreDirectivePrefix = "olm-annotation-lint: ignore"
+
+type ignoreSpec struct {
+	all   bool
+	rules map[string]bool
+}
+
+type ignoreSet map[string]ignoreSpec
+
+func (s ignoreSet) skipAll(key string) bool {
+	spec, ok := s[key]
+	return ok && spec.all
+}
+
+func (s ignoreSet) filter(key string, vs []Violation) []Violation {
+	spec, ok := s[key]
+	if !ok || spec.all {
+		return vs
+	}
+	var filtered []Violation
+	for _, v := range vs {
+		if spec.rules[v.Rule] {
+			continue
+		}
+		filtered = append(filtered, v)
+	}
+	return filtered
+}
+
+func extractIgnoreDirectives(node *yaml.Node) ignoreSet {
+	ignores := ignoreSet{}
+	if node == nil || node.Kind != yaml.MappingNode {
+		return ignores
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		keyNode, valNode := node.Content[i], node.Content[i+1]
+		spec, ok := parseIgnoreComments(keyNode.HeadComment, keyNode.LineComment, keyNode.FootComment, valNode.HeadComment, valNode.LineComment, valNode.FootComment)
+		if ok {
+			ignores[keyNode.Value] = spec
+		}
+	}
+	return ignores
+}
+
+func parseIgnoreComments(comments ...string) (ignoreSpec, bool) {
+	var spec ignoreSpec
+	found := false
+	for _, comment := range comments {
+		for _, line := range strings.Split(comment, "\n") {
+			line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "#"))
+			if !strings.HasPrefix(line, ignoreDirectivePrefix) {
+				continue
+			}
+			found = true
+			rest := strings.TrimSpace(strings.TrimPrefix(line, ignoreDirectivePrefix))
+			if rest == "" {
+				spec.all = true
+				continue
+			}
+			if spec.rules == nil {
+				spec.rules = map[string]bool{}
+			}
+			for _, ruleID := range strings.Fields(rest) {
+				spec.rules[strings.Trim(ruleID, ",")] = true
+			}
+		}
+	}
+	if spec.all {
+		spec.rules = nil
+	}
+	return spec, found
+}
+
 func findMappingValue(node *yaml.Node, key string) *yaml.Node {
 	if node == nil {
 		return nil
@@ -312,12 +506,51 @@ func findMappingValue(node *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
+func scalarValue(node *yaml.Node) string {
+	if node == nil {
+		return ""
+	}
+	return node.Value
+}
+
+func mapFromMapping(node *yaml.Node) map[string]string {
+	out := map[string]string{}
+	if node == nil || node.Kind != yaml.MappingNode {
+		return out
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		out[node.Content[i].Value] = node.Content[i+1].Value
+	}
+	return out
+}
+
+func resourceFromNode(node *yaml.Node) k8sResource {
+	meta := findMappingValue(node, "metadata")
+	return k8sResource{
+		APIVersion: scalarValue(findMappingValue(node, "apiVersion")),
+		Kind:       scalarValue(findMappingValue(node, "kind")),
+		Metadata: metadata{
+			Name:        scalarValue(findMappingValue(meta, "name")),
+			Annotations: mapFromMapping(findMappingValue(meta, "annotations")),
+		},
+	}
+}
+
 const bundleAnnotationPrefix = "operators.operatorframework.io.bundle."
 
-func lintBundleAnnotations(node *yaml.Node, source string, allowSet map[string]bool) []Violation {
+func lintBundleAnnotations(node *yaml.Node, source string, allowSet allowList) []Violation {
+	annNode := findMappingValue(node, "annotations")
+	dups := duplicateKeyViolations(annNode, source, rules.KindBundleAnnotations)
+
 	var bundle bundleAnnotationsFile
 	if err := node.Decode(&bundle); err != nil || len(bundle.Annotations) == 0 {
-		return nil
+		if len(dups) == 0 {
+			return nil
+		}
+		bundle.Annotations = mapFromMapping(annNode)
+		if len(bundle.Annotations) == 0 {
+			return dups
+		}
 	}
 
 	hasBundleKey := false
@@ -328,19 +561,24 @@ func lintBundleAnnotations(node *yaml.Node, source string, allowSet map[string]b
 		}
 	}
 	if !hasBundleKey {
-		return nil
+		return dups
 	}
 
-	annotationLines := annotationLinesFromNode(findMappingValue(node, "annotations"))
+	annotationLines := annotationLinesFromNode(annNode)
+	ignores := extractIgnoreDirectives(annNode)
 	var violations []Violation
+	violations = append(violations, dups...)
 
 	for key, value := range bundle.Annotations {
 		if !rules.IsOLMAnnotation(key) {
 			continue
 		}
+		if ignores.skipAll(key) {
+			continue
+		}
 		line := annotationLines[key]
-		v := validateAnnotation(source, line, key, value, rules.KindBundleAnnotations, allowSet)
-		violations = append(violations, v...)
+		v := validateAnnotation(source, line, key, value, rules.KindBundleAnnotations, "", allowSet)
+		violations = append(violations, ignores.filter(key, v)...)
 	}
 
 	for _, req := range rules.RequiredBundleAnnotations {
@@ -440,4 +678,36 @@ func csvMatchesPackage(csvName, pkg string) bool {
 		return true
 	}
 	return strings.HasPrefix(csvName, pkg+".")
+}
+
+func applyRuleConfig(violations []Violation, cfg map[string]RuleConfig) []Violation {
+	if len(cfg) == 0 {
+		return violations
+	}
+	var filtered []Violation
+	for _, v := range violations {
+		rc, ok := lookupRuleConfig(cfg, v)
+		if !ok {
+			filtered = append(filtered, v)
+			continue
+		}
+		if rc.Enabled != nil && !*rc.Enabled {
+			continue
+		}
+		if rc.Severity != nil {
+			v.Severity = *rc.Severity
+		}
+		filtered = append(filtered, v)
+	}
+	return filtered
+}
+
+func lookupRuleConfig(cfg map[string]RuleConfig, v Violation) (RuleConfig, bool) {
+	if rc, ok := cfg[v.Annotation]; ok {
+		return rc, true
+	}
+	if rc, ok := cfg[v.Rule]; ok {
+		return rc, true
+	}
+	return RuleConfig{}, false
 }

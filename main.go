@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/openshift-kni/olm-annotation-lint/pkg/linter"
 	"github.com/openshift-kni/olm-annotation-lint/pkg/reporter"
@@ -15,6 +18,31 @@ import (
 )
 
 var version = "dev"
+
+func displayVersion(ldflag string, info *debug.BuildInfo, ok bool) string {
+	if ldflag != "" && ldflag != "dev" {
+		return ldflag
+	}
+	if !ok || info == nil {
+		if ldflag == "" {
+			return "dev"
+		}
+		return ldflag
+	}
+	v := info.Main.Version
+	if v == "" || v == "(devel)" {
+		if ldflag == "" {
+			return "dev"
+		}
+		return ldflag
+	}
+	return v
+}
+
+func currentVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	return displayVersion(version, info, ok)
+}
 
 func splitAndTrim(s string) []string {
 	parts := strings.Split(s, ",")
@@ -39,12 +67,18 @@ func (s *stringOrList) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+type ruleConfig struct {
+	Enabled  *bool  `yaml:"enabled"`
+	Severity string `yaml:"severity"`
+}
+
 type config struct {
-	Path    stringOrList `yaml:"path"`
-	Exclude stringOrList `yaml:"exclude"`
-	Allow   stringOrList `yaml:"allow"`
-	Strict  *bool        `yaml:"strict"`
-	Format  string       `yaml:"format"`
+	Path    stringOrList          `yaml:"path"`
+	Exclude stringOrList          `yaml:"exclude"`
+	Allow   stringOrList          `yaml:"allow"`
+	Strict  *bool                 `yaml:"strict"`
+	Format  string                `yaml:"format"`
+	Rules   map[string]ruleConfig `yaml:"rules"`
 }
 
 func loadConfig(path string) (*config, error) {
@@ -70,6 +104,25 @@ func discoverConfig() (*config, error) {
 	return nil, nil
 }
 
+func ruleConfigsFrom(cfg *config) (map[string]linter.RuleConfig, error) {
+	if cfg == nil || len(cfg.Rules) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]linter.RuleConfig, len(cfg.Rules))
+	for key, rc := range cfg.Rules {
+		converted := linter.RuleConfig{Enabled: rc.Enabled}
+		if rc.Severity != "" {
+			sev, err := rules.ParseSeverity(rc.Severity)
+			if err != nil {
+				return nil, fmt.Errorf("rules.%s.severity: %w", key, err)
+			}
+			converted.Severity = &sev
+		}
+		out[key] = converted
+	}
+	return out, nil
+}
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -82,6 +135,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		strict      bool
 		format      string
 		configPath  string
+		outputPath  string
+		timeout     time.Duration
 		showVersion bool
 		listRules   bool
 	)
@@ -100,6 +155,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&format, "f", "text", "Output format: text, json, github, junit, sarif (shorthand)")
 	fs.StringVar(&configPath, "config", "", "Path to config file (default: .olm-lint.yaml in current directory)")
 	fs.StringVar(&configPath, "c", "", "Path to config file (shorthand)")
+	fs.StringVar(&outputPath, "output", "", "Write results to a file")
+	fs.StringVar(&outputPath, "o", "", "Write results to a file (shorthand)")
+	fs.DurationVar(&timeout, "timeout", 0, "Maximum duration (e.g. 30s, 5m); 0 means no timeout")
 	fs.BoolVar(&showVersion, "version", false, "Print version and exit")
 	fs.BoolVar(&showVersion, "v", false, "Print version and exit (shorthand)")
 	fs.BoolVar(&listRules, "list-rules", false, "List all known OLM annotations and exit")
@@ -110,7 +168,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if showVersion {
-		_, _ = fmt.Fprintln(stdout, version)
+		_, _ = fmt.Fprintln(stdout, currentVersion())
 		return 0
 	}
 
@@ -162,10 +220,24 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	violations, err := linter.Run(linter.Options{
+	ruleConfigs, err := ruleConfigsFrom(cfg)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+
+	ctx := context.Background()
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	violations, err := linter.Run(ctx, linter.Options{
 		Paths:              paths,
 		Exclude:            excludePaths,
 		AllowedAnnotations: allowedAnnotations,
+		Rules:              ruleConfigs,
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
@@ -178,8 +250,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	if len(violations) > 0 {
-		reporter.Report(stdout, violations, outputFormat, version)
+	reportWriter := stdout
+	if outputPath != "" {
+		f, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // output path is user-specified CLI input
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: cannot write output file %s: %v\n", outputPath, err)
+			return 2
+		}
+		defer func() { _ = f.Close() }()
+		reportWriter = f
+	}
+
+	if len(violations) > 0 || outputPath != "" {
+		reporter.Report(reportWriter, violations, outputFormat, currentVersion())
 	}
 
 	var errorCount, warningCount int

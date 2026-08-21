@@ -20,11 +20,13 @@ All flags support both long and short forms:
 | Long | Short | Description |
 |------|-------|-------------|
 | `--path` | `-p` | Path or comma-separated paths to scan |
-| `--exclude` | `-e` | Comma-separated paths to exclude |
-| `--allow` | `-a` | Comma-separated annotation keys to allow |
+| `--exclude` | `-e` | Comma-separated directory names or file globs to skip |
+| `--allow` | `-a` | Comma-separated annotation keys to allow. A trailing `*` matches a prefix (for example `olm.*`). |
 | `--strict` | `-s` | Treat warnings as errors |
 | `--format` | `-f` | Output format: text, json, github, junit |
 | `--config` | `-c` | Path to config file |
+| `--output` | `-o` | Write results to a file |
+| `--timeout` | | Maximum duration (e.g. `30s`, `5m`); 0 means no timeout |
 | `--version` | `-v` | Print version and exit |
 | `--list-rules` | `-l` | List all known OLM annotations and exit |
 
@@ -42,12 +44,38 @@ exclude:
 allow:
   - "olm.operatorframework.io/bundle-install-timeout"
 strict: false
+format: text
+rules:
+  olm.operatorGroup:
+    enabled: false
+  unknown-annotation:
+    severity: warning
 ```
 
 Fields accept either a list or a comma-separated string (e.g., `exclude: "vendor,testdata"`).
 
+The `rules` map is keyed by annotation name (`olm.skipRange`) or rule ID
+(`unknown-annotation`, `case-mismatch`, `controller-managed`, and so on).
+Set `enabled: false` to suppress matching violations, or `severity` to
+`error`, `warning`, or `info`.
+
 The config file is auto-discovered in the current directory. Use `--config` to specify a
 custom path. CLI flags always take precedence over config file values.
+
+## Inline ignore directives
+
+Suppress violations for a specific annotation with a YAML comment:
+
+```yaml
+metadata:
+  annotations:
+    # olm-annotation-lint: ignore
+    olm.custom.annotation: "value"
+    olm.operatorGroup: og-test  # olm-annotation-lint: ignore controller-managed
+```
+
+`# olm-annotation-lint: ignore` skips all rules for that key. Add one or more
+rule IDs (from JSON/JUnit/SARIF output) to ignore only those rules.
 
 ## Exit Codes
 
@@ -62,7 +90,7 @@ custom path. CLI flags always take precedence over config file values.
 - `text` (default) — human-readable with file:line references
 - `json` — structured report with summary counts and violation details
 - `github` — GitHub Actions annotation format
-- `junit` — JUnit XML for CI dashboards
+- `junit` — JUnit XML for CI dashboards (errors are failures; warnings are `system-err`)
 - `sarif` — SARIF 2.1.0 for the GitHub Security tab
 
 ### JSON Format
@@ -81,6 +109,7 @@ custom path. CLI flags always take precedence over config file values.
       "line": 12,
       "annotation": "olm.fakeAnnotation",
       "kind": "ClusterServiceVersion",
+      "name": "test-operator.v1.0.0",
       "severity": "error",
       "rule": "unknown-annotation",
       "message": "unknown OLM annotation"

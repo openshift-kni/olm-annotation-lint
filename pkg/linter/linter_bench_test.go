@@ -1,6 +1,7 @@
 package linter_test
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -15,7 +16,7 @@ func BenchmarkLintDataCSV(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		_, err := linter.LintData(data, "bench.yaml", nil)
+		_, err := linter.LintData(context.Background(), data, "bench.yaml", nil)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -30,7 +31,7 @@ func BenchmarkLintDataBundle(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		_, err := linter.LintData(data, "bench.yaml", nil)
+		_, err := linter.LintData(context.Background(), data, "bench.yaml", nil)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -40,7 +41,7 @@ func BenchmarkLintDataBundle(b *testing.B) {
 func BenchmarkRunValidDir(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		_, err := linter.Run(linter.Options{Paths: []string{"../../testdata/valid"}})
+		_, err := linter.Run(context.Background(), linter.Options{Paths: []string{"../../testdata/valid"}})
 		if err != nil {
 			b.Fatal(err)
 		}

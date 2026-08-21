@@ -1,6 +1,7 @@
 package linter_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/openshift-kni/olm-annotation-lint/pkg/linter"
@@ -24,6 +25,6 @@ metadata:
 	f.Add([]byte("annotations:\n  operators.operatorframework.io.bundle.mediatype.v1: registry+v1\n"))
 
 	f.Fuzz(func(_ *testing.T, data []byte) {
-		_, _ = linter.LintData(data, "fuzz.yaml", nil)
+		_, _ = linter.LintData(context.Background(), data, "fuzz.yaml", nil)
 	})
 }

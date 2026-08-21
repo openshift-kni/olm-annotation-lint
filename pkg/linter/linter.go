@@ -2,6 +2,7 @@ package linter
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -43,11 +44,19 @@ type Options struct {
 	AllowedAnnotations []string
 }
 
-func Run(opts Options) ([]Violation, error) {
+func Run(ctx context.Context, opts Options) ([]Violation, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	var allViolations []Violation
 	stdinConsumed := false
 
 	for _, p := range opts.Paths {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
 		if p == "-" {
 			if stdinConsumed {
 				return nil, fmt.Errorf("stdin (-) can only be specified once")
@@ -57,7 +66,7 @@ func Run(opts Options) ([]Violation, error) {
 			if err != nil {
 				return nil, fmt.Errorf("reading stdin: %w", err)
 			}
-			violations, err := LintData(data, "<stdin>", opts.AllowedAnnotations)
+			violations, err := LintData(ctx, data, "<stdin>", opts.AllowedAnnotations)
 			if err != nil {
 				return nil, err
 			}
@@ -71,13 +80,13 @@ func Run(opts Options) ([]Violation, error) {
 		}
 
 		if info.IsDir() {
-			violations, err := lintDirectory(p, opts.Exclude, opts.AllowedAnnotations)
+			violations, err := lintDirectory(ctx, p, opts.Exclude, opts.AllowedAnnotations)
 			if err != nil {
 				return nil, err
 			}
 			allViolations = append(allViolations, violations...)
 		} else {
-			violations, err := lintFile(p, opts.AllowedAnnotations)
+			violations, err := lintFile(ctx, p, opts.AllowedAnnotations)
 			if err != nil {
 				return nil, err
 			}
@@ -88,11 +97,14 @@ func Run(opts Options) ([]Violation, error) {
 	return allViolations, nil
 }
 
-func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([]Violation, error) {
+func lintDirectory(ctx context.Context, dir string, exclude []string, allowedAnnotations []string) ([]Violation, error) {
 	var violations []Violation
 
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if d.IsDir() {
@@ -113,7 +125,7 @@ func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([
 			return nil
 		}
 
-		fileViolations, err := lintFile(path, allowedAnnotations)
+		fileViolations, err := lintFile(ctx, path, allowedAnnotations)
 		if err != nil {
 			return err
 		}
@@ -124,15 +136,18 @@ func lintDirectory(dir string, exclude []string, allowedAnnotations []string) ([
 	return violations, err
 }
 
-func lintFile(path string, allowedAnnotations []string) ([]Violation, error) {
+func lintFile(ctx context.Context, path string, allowedAnnotations []string) ([]Violation, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // lint target path is user-specified CLI input
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
-	return LintData(data, path, allowedAnnotations)
+	return LintData(ctx, data, path, allowedAnnotations)
 }
 
-func LintData(data []byte, source string, allowedAnnotations []string) ([]Violation, error) {
+func LintData(ctx context.Context, data []byte, source string, allowedAnnotations []string) ([]Violation, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	allowSet := make(map[string]bool, len(allowedAnnotations))
 	for _, a := range allowedAnnotations {
 		allowSet[a] = true
@@ -142,6 +157,10 @@ func LintData(data []byte, source string, allowedAnnotations []string) ([]Violat
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
 		var node yaml.Node
 		err := decoder.Decode(&node)
 		if errors.Is(err, io.EOF) {

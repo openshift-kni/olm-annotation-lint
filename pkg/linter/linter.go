@@ -22,6 +22,7 @@ type Violation struct {
 	Severity   rules.Severity
 	Rule       string
 	Message    string
+	Suggestion string
 }
 
 type k8sResource struct {
@@ -229,8 +230,13 @@ func validateAnnotation(file string, line int, key, value, kind string, allowedA
 	if !found {
 		caseRule, caseFound := rules.FindRuleCaseInsensitive(key)
 		if caseFound {
-			violations = append(violations, newViolation(rules.SeverityError, rules.RuleCaseMismatch,
-				fmt.Sprintf("annotation has wrong casing, use %q", caseRule.Key)))
+			violations = append(violations, Violation{
+				File: file, Line: line, Annotation: key, Kind: kind,
+				Severity:   rules.SeverityError,
+				Rule:       rules.RuleCaseMismatch,
+				Message:    fmt.Sprintf("annotation case mismatch: use %q instead of %q", caseRule.Key, key),
+				Suggestion: caseRule.Key,
+			})
 			return violations
 		}
 

@@ -139,12 +139,23 @@ func TestCaseMismatch(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	found := findViolation(violations, "OLM.providedAPIs", "wrong casing")
+	found := findViolation(violations, "OLM.providedAPIs", "case mismatch")
 	if !found {
 		t.Error("expected violation for case mismatch")
 	}
 	if rule := findViolationRule(violations, "OLM.providedAPIs"); rule != rules.RuleCaseMismatch {
 		t.Errorf("expected rule 'case-mismatch', got %q", rule)
+	}
+	for _, v := range violations {
+		if v.Annotation == "OLM.providedAPIs" {
+			if v.Suggestion != "olm.providedAPIs" {
+				t.Errorf("expected suggestion %q, got %q", "olm.providedAPIs", v.Suggestion)
+			}
+			if !strings.Contains(v.Message, `use "olm.providedAPIs" instead of "OLM.providedAPIs"`) {
+				t.Errorf("expected message to name both keys, got %q", v.Message)
+			}
+			break
+		}
 	}
 }
 
@@ -489,7 +500,7 @@ func TestMultipleViolationsSingleResource(t *testing.T) {
 	}{
 		{"olm.skipRange", "invalid semver range", rules.SeverityError},
 		{"olm.unknown-annotation", "unknown OLM annotation", rules.SeverityError},
-		{"OLM.providedAPIs", "wrong casing", rules.SeverityError},
+		{"OLM.providedAPIs", "case mismatch", rules.SeverityError},
 		{"olm.operatorGroup", "controller-managed", rules.SeverityWarning},
 	}
 	for _, expected := range expectedViolations {
@@ -751,9 +762,14 @@ func TestBundleAnnotationsCaseMismatch(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	found := findViolation(violations, "operators.operatorframework.io.bundle.MediaType.v1", "wrong casing")
+	found := findViolation(violations, "operators.operatorframework.io.bundle.MediaType.v1", "case mismatch")
 	if !found {
 		t.Error("expected violation for bundle annotation case mismatch")
+	}
+	for _, v := range violations {
+		if v.Annotation == "operators.operatorframework.io.bundle.MediaType.v1" && v.Suggestion != "operators.operatorframework.io.bundle.mediatype.v1" {
+			t.Errorf("expected suggestion %q, got %q", "operators.operatorframework.io.bundle.mediatype.v1", v.Suggestion)
+		}
 	}
 }
 

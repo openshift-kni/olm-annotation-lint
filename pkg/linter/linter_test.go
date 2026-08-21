@@ -103,6 +103,20 @@ func TestBadTemplateValue(t *testing.T) {
 	}
 }
 
+func TestUnknownTemplateVariable(t *testing.T) {
+	violations, err := linter.Run(linter.Options{
+		Paths: []string{"../../testdata/invalid/unknown_template_variable.yaml"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := findViolation(violations, "olm.catalogImageTemplate", "unknown variable")
+	if !found {
+		t.Error("expected violation for unknown template variable")
+	}
+}
+
 func TestBadSemverRange(t *testing.T) {
 	violations, err := linter.Run(context.Background(), linter.Options{
 		Paths: []string{"../../testdata/invalid/bad_semver_range.yaml"},
